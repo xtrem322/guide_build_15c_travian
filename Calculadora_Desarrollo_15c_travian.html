@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora ROI Travian - 15C Capital</title>
+    <style>
+        :root {
+            /* MODO OSCURO (Por defecto) */
+            --bg-color: #22272e;
+            --panel-bg: #2d333b;
+            --border-color: #444c56;
+            --text-color: #adbac7;
+            --primary: #73ab84;
+            --primary-hover: #5a916a;
+            --secondary-text: #768390;
+            --highlight: #8cb6ce;
+            --warning: #dcbfa3;
+            --great-warning: #e09f7d;
+            --action-pop: #ffa726;
+            --roi-color: #ef4444; /* Rojo para el ROI */
+            --granary-color: #a3dcdb;
+
+            /* Cabecera de la tabla usa el mismo color que el botón */
+            --th-bg: var(--primary);
+            --th-text: #1e2329; /* Texto oscuro para contrastar con el verde */
+            --tr-hover: #323942;
+            --title-color: var(--primary);
+        }
+
+        body.light-mode {
+            /* MODO CLARO */
+            --bg-color: #f4f7fa;
+            --panel-bg: #ffffff;
+            --border-color: #cbd5e1;
+            --text-color: #1e293b;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --secondary-text: #475569;
+            --highlight: #0284c7;
+            --warning: #b45309;
+            --great-warning: #c2410c;
+            --action-pop: #ea580c;
+            --roi-color: #ef4444; /* Rojo para el ROI */
+            --granary-color: #0d9488;
+
+            /* Cabecera de la tabla usa el color del botón azul */
+            --th-bg: var(--primary);
+            --th-text: #ffffff; /* Texto blanco para contrastar con el azul */
+            --tr-hover: #f1f5f9;
+            --title-color: #0f172a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 1550px;
+            margin: 0 auto;
+        }
+
+        .header-container {
+            position: relative;
+            text-align: center;
+            margin-bottom: 20px;
+            padding-top: 10px;
+        }
+        .theme-toggle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: var(--panel-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .theme-toggle:hover {
+            background-color: var(--border-color);
+        }
+
+        h1 {
+            color: var(--title-color);
+            margin-bottom: 5px;
+            font-weight: 700;
+            margin-top: 0;
+        }
+        .subtitle {
+            color: var(--secondary-text);
+            font-size: 14px;
+        }
+        .controls {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        label {
+            font-size: 11px;
+            color: var(--secondary-text);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        select {
+            padding: 9px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        select:focus {
+            border-color: var(--primary);
+        }
+        button.calc-btn {
+            background-color: var(--primary);
+            color: #ffffff;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 700;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            margin-top: 15px;
+        }
+        :root button.calc-btn { color: #1e2329; }
+        body.light-mode button.calc-btn { color: #ffffff; }
+
+        button.calc-btn:hover {
+            background-color: var(--primary-hover);
+        }
+        button.calc-btn:active {
+            transform: scale(0.98);
+        }
+        .table-container {
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            overflow-x: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+            max-height: 70vh;
+            overflow-y: auto;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            white-space: nowrap;
+            width: 1%;
+        }
+        th {
+            background-color: var(--th-bg);
+            color: var(--th-text);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        tr:hover {
+            background-color: var(--tr-hover);
+        }
+        th:nth-child(4), td:nth-child(4) {
+            width: auto;
+            text-align: left;
+        }
+
+        /* Columnas M,P,H,OH y Fields */
+        .array-text {
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: var(--highlight);
+            letter-spacing: 0.5px;
+        }
+        body.light-mode .array-text {
+            color: #0f172a; /* Azul oscuro noche */
+            font-weight: bold;
+        }
+
+        .storage-text { color: var(--warning); font-weight: 600;}
+        .great-storage-text { color: var(--great-warning); font-weight: 600;}
+        .granary-text { color: var(--granary-color); font-weight: 600;}
+        .great-granary-text { color: #82c8c7; font-weight: 600;}
+
+        body.light-mode .granary-text { color: #0f766e; }
+        body.light-mode .great-granary-text { color: #0369a1; }
+
+        .action-highlight {
+            color: var(--action-pop);
+            font-weight: 700;
+        }
+
+        /* Costo Total en texto normal */
+        .cost-text {
+            color: var(--text-color);
+            font-family: 'Consolas', monospace;
+        }
+
+        /* Días ROI en color rojo */
+        .roi-text {
+            color: var(--roi-color);
+            font-weight: bold;
+        }
+
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #5a6573; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-container">
+        <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️ Modo Claro</button>
+        <h1>Calculadora de ROI de Producción</h1>
+        <div class="subtitle">Travian 15C Capital - Optimización Matemática (Bono Oro 25% incluido)</div>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Servidor</label>
+            <select id="serverSpeed">
+                <option value="1">Velocidad x1</option>
+                <option value="2" selected>Velocidad x2</option>
+                <option value="3">Velocidad x3</option>
+                <option value="5">Velocidad x5</option>
+                <option value="10">Velocidad x10</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Raza Egipcia</label>
+            <select id="isEgyptian">
+                <option value="no" selected>No (Razas Clásicas)</option>
+                <option value="yes">Sí (Obras Hidráulicas)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Oasis 1 (Héroe Lvl 10)</label>
+            <select id="oasis1">
+                <option value="0.50">Oasis 50%</option>
+                <option value="0.25">Oasis 25%</option>
+                <option value="0">Ninguno (0%)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Oasis 2 (Héroe Lvl 15)</label>
+            <select id="oasis2">
+                <option value="0.50">Oasis 50%</option>
+                <option value="0.25" selected>Oasis 25%</option>
+                <option value="0">Ninguno (0%)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Oasis 3 (Héroe Lvl 20)</label>
+            <select id="oasis3">
+                <option value="0.50">Oasis 50%</option>
+                <option value="0.25">Oasis 25%</option>
+                <option value="0" selected>Ninguno (0%)</option>
+            </select>
+        </div>
+        <button class="calc-btn" onclick="calcularROI()">Calcular Ruta Óptima</button>
+    </div>
+
+    <div class="table-container">
+        <table id="resultTable">
+            <thead>
+                <tr>
+                    <th>[M, P, H, OH]</th>
+                    <th>[Fields]</th>
+                    <th>Producción / h</th>
+                    <th>Acción</th>
+                    <th>Costo Total</th>
+                    <th>Días ROI</th>
+                    <th title="Almacén Normal">A</th>
+                    <th title="Granero Normal">G</th>
+                    <th title="Gran Almacén (x3)">G.A</th>
+                    <th title="Gran Granero (x3)">G.G</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function toggleTheme() {
+        const body = document.body;
+        const btn = document.getElementById('themeToggle');
+
+        body.classList.toggle('light-mode');
+
+        if (body.classList.contains('light-mode')) {
+            btn.innerHTML = '🌙 Modo Oscuro';
+            localStorage.setItem('theme', 'light');
+        } else {
+            btn.innerHTML = '☀️ Modo Claro';
+            localStorage.setItem('theme', 'dark');
+        }
+    }
+
+    window.onload = () => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+            document.getElementById('themeToggle').innerHTML = '🌙 Modo Oscuro';
+        }
+        calcularROI();
+    };
+
+    const crop_data = [
+        { level: 0, cost: 0, prod: 2, maxRes: 0, maxCrop: 0 },
+        { level: 1, cost: 250, prod: 14, maxRes: 90, maxCrop: 20 },
+        { level: 2, cost: 415, prod: 26, maxRes: 150, maxCrop: 35 },
+        { level: 3, cost: 695, prod: 42, maxRes: 250, maxCrop: 55 },
+        { level: 4, cost: 1165, prod: 62, maxRes: 420, maxCrop: 95 },
+        { level: 5, cost: 1945, prod: 92, maxRes: 700, maxCrop: 155 },
+        { level: 6, cost: 3250, prod: 140, maxRes: 1170, maxCrop: 260 },
+        { level: 7, cost: 5425, prod: 196, maxRes: 1950, maxCrop: 435 },
+        { level: 8, cost: 9055, prod: 280, maxRes: 3260, maxCrop: 725 },
+        { level: 9, cost: 15125, prod: 406, maxRes: 5445, maxCrop: 1210 },
+        { level: 10, cost: 25255, prod: 560, maxRes: 9095, maxCrop: 2020 },
+        { level: 11, cost: 42180, prod: 784, maxRes: 15185, maxCrop: 3375 },
+        { level: 12, cost: 70445, prod: 1050, maxRes: 25360, maxCrop: 5635 },
+        { level: 13, cost: 117640, prod: 1386, maxRes: 42350, maxCrop: 9410 },
+        { level: 14, cost: 196445, prod: 1778, maxRes: 70720, maxCrop: 15715 },
+        { level: 15, cost: 328070, prod: 2240, maxRes: 118105, maxCrop: 26245 },
+        { level: 16, cost: 547880, prod: 2800, maxRes: 197240, maxCrop: 43830 },
+        { level: 17, cost: 914960, prod: 3640, maxRes: 329385, maxCrop: 73195 },
+        { level: 18, cost: 1527985, prod: 4480, maxRes: 550075, maxCrop: 122240 },
+        { level: 19, cost: 2551735, prod: 5600, maxRes: 918625, maxCrop: 204140 },
+        { level: 20, cost: 4261410, prod: 6860, maxRes: 1534105, maxCrop: 340915 },
+        { level: 21, cost: 7116555, prod: 8540, maxRes: 2561960, maxCrop: 569325 },
+        { level: 22, cost: 11884640, prod: 10500, maxRes: 4278470, maxCrop: 950770 }
+    ];
+
+    const mill_data = [
+        { cost: 0, maxRes: 0, maxCrop: 0 },
+        { cost: 2560, maxRes: 500, maxCrop: 1240 },
+        { cost: 4605, maxRes: 900, maxCrop: 2230 },
+        { cost: 8295, maxRes: 1620, maxCrop: 4020 },
+        { cost: 14925, maxRes: 2915, maxCrop: 7230 },
+        { cost: 26875, maxRes: 5250, maxCrop: 13015 }
+    ];
+
+    const bakery_data = [
+        { cost: 0, maxRes: 0, maxCrop: 0 },
+        { cost: 5150, maxRes: 1480, maxCrop: 1600 },
+        { cost: 9270, maxRes: 2665, maxCrop: 2880 },
+        { cost: 16690, maxRes: 4795, maxCrop: 5185 },
+        { cost: 30035, maxRes: 8630, maxCrop: 9330 },
+        { cost: 54060, maxRes: 15535, maxCrop: 16795 }
+    ];
+
+    const hm_groups = [
+        { targetLevel: 10, cost: 114240, maxRes: 9115, maxCrop: 3125 },
+        { targetLevel: 15, cost: 383295, maxRes: 37935, maxCrop: 13005 },
+        { targetLevel: 20, cost: 1595070, maxRes: 157865, maxCrop: 54125 }
+    ];
+
+    const waterworks_data = [
+        { level: 0, cost: 0, maxRes: 0, maxCrop: 0 },
+        { level: 1, cost: 3105, maxRes: 945, maxCrop: 340 },
+        { level: 2, cost: 4065, maxRes: 1240, maxCrop: 445 },
+        { level: 3, cost: 5325, maxRes: 1620, maxCrop: 585 },
+        { level: 4, cost: 6980, maxRes: 2125, maxCrop: 765 },
+        { level: 5, cost: 9145, maxRes: 2785, maxCrop: 1000 },
+        { level: 6, cost: 11975, maxRes: 3645, maxCrop: 1310 },
+        { level: 7, cost: 15695, maxRes: 4775, maxCrop: 1720 },
+        { level: 8, cost: 20555, maxRes: 6255, maxCrop: 2250 },
+        { level: 9, cost: 26925, maxRes: 8195, maxCrop: 2950 },
+        { level: 10, cost: 35280, maxRes: 10735, maxCrop: 3865 },
+        { level: 11, cost: 46215, maxRes: 14065, maxCrop: 5060 },
+        { level: 12, cost: 60545, maxRes: 18425, maxCrop: 6630 },
+        { level: 13, cost: 79310, maxRes: 24135, maxCrop: 8685 },
+        { level: 14, cost: 103895, maxRes: 31620, maxCrop: 11375 },
+        { level: 15, cost: 136105, maxRes: 41420, maxCrop: 14905 },
+        { level: 16, cost: 178300, maxRes: 54265, maxCrop: 19525 },
+        { level: 17, cost: 233560, maxRes: 71085, maxCrop: 25575 },
+        { level: 18, cost: 305965, maxRes: 93120, maxCrop: 33505 },
+        { level: 19, cost: 400815, maxRes: 121985, maxCrop: 43890 },
+        { level: 20, cost: 525070, maxRes: 159805, maxCrop: 57495 }
+    ];
+
+    const warehouse_cap = [800, 1200, 1700, 2300, 3100, 4000, 5000, 6300, 7800, 9600, 11800, 14400, 17600, 21400, 25900, 31300, 37900, 45700, 55100, 66400, 80000];
+
+    function calcularProduccion(fields, M, P, oasis_bonuses_active, speed, OH_level) {
+        let base_prod = 0;
+
+        for (let lvl of fields) {
+            let base_x1 = crop_data[lvl].prod / 2;
+            base_prod += base_x1 * speed;
+        }
+
+        let multiplier = 1.0;
+        multiplier += (M * 0.05);
+        multiplier += (P * 0.05);
+
+        let oasis_multiplier = 1 + (OH_level * 0.05);
+
+        for (let b of oasis_bonuses_active) {
+            multiplier += (b * oasis_multiplier);
+        }
+
+        let total_prod = base_prod * multiplier * 1.25;
+        return Math.round(total_prod);
+    }
+
+    function calcularCapacidad(maxValor, esGranAlmacen, tipo) {
+        let nombre = "";
+        if (tipo === 'A') nombre = esGranAlmacen ? "G.A" : "A";
+        if (tipo === 'G') nombre = esGranAlmacen ? "G.G" : "G";
+
+        if (maxValor <= 800) return `1 ${nombre} [Niv. 0]`;
+
+        const capacidades = esGranAlmacen
+            ? warehouse_cap.map((cap, index) => index === 0 ? 800 : cap * 3)
+            : warehouse_cap;
+
+        const maxCap = esGranAlmacen ? 240000 : 80000;
+
+        let fullBuildings = Math.floor(maxValor / maxCap);
+        let remainder = maxValor % maxCap;
+
+        if (remainder === 0 && fullBuildings > 0) {
+            return `${fullBuildings} ${nombre} [Niv. 20]`;
+        }
+
+        let lvl = capacidades.findIndex(cap => cap >= remainder);
+        if (lvl === -1 && remainder > 0) lvl = 20;
+
+        let strings = [];
+        if (fullBuildings > 0) {
+            strings.push(`${fullBuildings} ${nombre} [Niv. 20]`);
+        }
+        if (lvl > 0) {
+            strings.push(`1 ${nombre} [Niv. ${lvl}]`);
+        }
+
+        return strings.join(" + ");
+    }
+
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    function calcularROI() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = "";
+
+        let speed = parseInt(document.getElementById('serverSpeed').value);
+        let isEgyptian = document.getElementById('isEgyptian').value === 'yes';
+
+        let raw_oasis = [
+            parseFloat(document.getElementById('oasis1').value),
+            parseFloat(document.getElementById('oasis2').value),
+            parseFloat(document.getElementById('oasis3').value)
+        ];
+        let selected_oasis = raw_oasis.filter(v => v > 0).sort((a,b) => b - a);
+
+        let fields = new Array(15).fill(0);
+        let M = 0, P = 0, H = 0, OH = 0, O_idx = 0;
+
+        let highest_max_res = 800;
+        let highest_max_crop = 800;
+
+        let current_prod = calcularProduccion(fields, M, P, [], speed, OH);
+
+        let row = `<tr>
+            <td class="array-text">[${M}, ${P}, ${H}, ${OH}]</td>
+            <td class="array-text">[${fields.join(',')}]</td>
+            <td>${current_prod}</td>
+            <td>Inicio</td>
+            <td class="cost-text">-</td>
+            <td class="roi-text">-</td>
+            <td class="storage-text">${calcularCapacidad(highest_max_res, false, 'A')}</td>
+            <td class="granary-text">${calcularCapacidad(highest_max_crop, false, 'G')}</td>
+            <td class="great-storage-text">${calcularCapacidad(highest_max_res, true, 'A')}</td>
+            <td class="great-granary-text">${calcularCapacidad(highest_max_crop, true, 'G')}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+
+        let steps = 0;
+        const maxSteps = 500;
+
+        while (steps < maxSteps) {
+            steps++;
+            let options = [];
+
+            let minFieldLvl = Math.min(...fields);
+            if (minFieldLvl < 22) {
+                let cost = crop_data[minFieldLvl + 1].cost;
+                let newFields = [...fields];
+                newFields[newFields.indexOf(minFieldLvl)]++;
+
+                let newProd = calcularProduccion(newFields, M, P, selected_oasis.slice(0, O_idx), speed, OH);
+                let extraProd = newProd - current_prod;
+                let roiDays = (cost / extraProd) / 24;
+
+                options.push({
+                    type: 'field',
+                    roi: roiDays,
+                    cost: cost,
+                    newProd: newProd,
+                    maxRes: crop_data[minFieldLvl + 1].maxRes,
+                    maxCrop: crop_data[minFieldLvl + 1].maxCrop,
+                    action: `Subir una Granja al nivel ${minFieldLvl + 1}`,
+                    execute: () => { fields[fields.indexOf(minFieldLvl)]++; }
+                });
+            }
+
+            let maxFieldLvl = Math.max(...fields);
+            if (M < 5 && maxFieldLvl >= 5) {
+                let cost = mill_data[M + 1].cost;
+                let newProd = calcularProduccion(fields, M + 1, P, selected_oasis.slice(0, O_idx), speed, OH);
+                let extraProd = newProd - current_prod;
+                let roiDays = (cost / extraProd) / 24;
+
+                options.push({
+                    type: 'mill',
+                    roi: roiDays,
+                    cost: cost,
+                    newProd: newProd,
+                    maxRes: mill_data[M + 1].maxRes,
+                    maxCrop: mill_data[M + 1].maxCrop,
+                    action: `Subir Molino al nivel ${M + 1}`,
+                    execute: () => { M++; }
+                });
+            }
+
+            if (P < 5 && M === 5 && maxFieldLvl >= 10) {
+                let cost = bakery_data[P + 1].cost;
+                let newProd = calcularProduccion(fields, M, P + 1, selected_oasis.slice(0, O_idx), speed, OH);
+                let extraProd = newProd - current_prod;
+                let roiDays = (cost / extraProd) / 24;
+
+                options.push({
+                    type: 'bakery',
+                    roi: roiDays,
+                    cost: cost,
+                    newProd: newProd,
+                    maxRes: bakery_data[P + 1].maxRes,
+                    maxCrop: bakery_data[P + 1].maxCrop,
+                    action: `Subir Panadería al nivel ${P + 1}`,
+                    execute: () => { P++; }
+                });
+            }
+
+            if (O_idx < selected_oasis.length) {
+                let cost = hm_groups[O_idx].cost;
+                let newOasisList = selected_oasis.slice(0, O_idx + 1);
+                let newProd = calcularProduccion(fields, M, P, newOasisList, speed, OH);
+                let extraProd = newProd - current_prod;
+                let roiDays = (cost / extraProd) / 24;
+                let targetHM = hm_groups[O_idx].targetLevel;
+                let bonusStr = (selected_oasis[O_idx] * 100) + "%";
+
+                options.push({
+                    type: 'oasis',
+                    roi: roiDays,
+                    cost: cost,
+                    newProd: newProd,
+                    maxRes: hm_groups[O_idx].maxRes,
+                    maxCrop: hm_groups[O_idx].maxCrop,
+                    action: `Subir H. Héroe a lvl ${targetHM} y anexar Oasis ${bonusStr}`,
+                    execute: () => { H = targetHM; O_idx++; }
+                });
+            }
+
+            if (isEgyptian && O_idx > 0 && OH < 20) {
+                let cost = waterworks_data[OH + 1].cost;
+                let newProd = calcularProduccion(fields, M, P, selected_oasis.slice(0, O_idx), speed, OH + 1);
+                let extraProd = newProd - current_prod;
+                let roiDays = (cost / extraProd) / 24;
+
+                options.push({
+                    type: 'waterworks',
+                    roi: roiDays,
+                    cost: cost,
+                    newProd: newProd,
+                    maxRes: waterworks_data[OH + 1].maxRes,
+                    maxCrop: waterworks_data[OH + 1].maxCrop,
+                    action: `Subir Obras Hidráulicas al nivel ${OH + 1}`,
+                    execute: () => { OH++; }
+                });
+            }
+
+            if (options.length === 0) break;
+
+            options.sort((a, b) => a.roi - b.roi);
+            let bestOption = options[0];
+
+            bestOption.execute();
+            current_prod = bestOption.newProd;
+
+            if (bestOption.maxRes > highest_max_res) highest_max_res = bestOption.maxRes;
+            if (bestOption.maxCrop > highest_max_crop) highest_max_crop = bestOption.maxCrop;
+
+            let actionClass = bestOption.type !== 'field' ? "action-highlight" : "";
+
+            let tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="array-text">[${M}, ${P}, ${H}, ${OH}]</td>
+                <td class="array-text">[${fields.join(',')}]</td>
+                <td>${current_prod}</td>
+                <td class="${actionClass}">Paso ${steps}: ${bestOption.action}</td>
+                <td class="cost-text">${formatNumber(bestOption.cost)}</td>
+                <td class="roi-text">${bestOption.roi.toFixed(2)}</td>
+                <td class="storage-text">${calcularCapacidad(highest_max_res, false, 'A')}</td>
+                <td class="granary-text">${calcularCapacidad(highest_max_crop, false, 'G')}</td>
+                <td class="great-storage-text">${calcularCapacidad(highest_max_res, true, 'A')}</td>
+                <td class="great-granary-text">${calcularCapacidad(highest_max_crop, true, 'G')}</td>
+            `;
+            tbody.appendChild(tr);
+        }
+    }
+</script>
+
+</body>
+</html>
