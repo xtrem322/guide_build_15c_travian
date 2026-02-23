@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPC Optimizador</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="sticky-top">
+    <div class="topline">
+      <button id="themeToggle" class="theme-toggle" type="button">☀️ Modo Claro</button>
+
+      <div class="top-actions">
+        <a class="nav-link" href="../roi/">ROI Producción</a>
+        <span class="nav-sep">|</span>
+        <a class="nav-link active" href="../npc/">NPC Optimizador</a>
+      </div>
+    </div>
+
+    <h1 class="page-title">NPC Optimizador</h1>
+    <div class="subtitle">Travian 15C Capital - Reparto de Recursos (NPC)</div>
+
+    <div class="toolbar">
+      <div class="tool">
+        <div class="tool-label">Raza</div>
+        <select id="raceSelect"></select>
+      </div>
+
+      <div class="tool">
+        <div class="tool-label">Excedente</div>
+        <select id="excessMode">
+          <option value="eq" selected>Opción 1: Equitativo</option>
+          <option value="time">Opción 2: Tropas por tiempo</option>
+          <option value="exact">Opción 3: Tropa exacta</option>
+        </select>
+      </div>
+
+      <div class="tool">
+        <div class="tool-label">Orden residuo</div>
+        <select id="eqOrder">
+          <option value="MBHC" selected>M→B→H→C</option>
+          <option value="CBHM">C→B→H→M</option>
+          <option value="MCHB">M→C→H→B</option>
+        </select>
+      </div>
+
+      <div class="tool tool-wide">
+        <div class="tool-label">Recursos actuales (Total)</div>
+        <input id="curTotal" type="number" min="0" value="0" placeholder="Total">
+      </div>
+
+      <button class="btn" id="addRow" type="button">+ Añadir fila</button>
+    </div>
+
+    <div class="label-yellow">MATERIAS TOTAL</div>
+
+    <div class="total-bar">
+      <div class="hdr-blue left">TOTAL REPARTIR →</div>
+      <div class="hdr-blue">Madera</div>
+      <div class="hdr-blue">Barro</div>
+      <div class="hdr-blue">Hierro</div>
+      <div class="hdr-blue">Cereal</div>
+      <div class="hdr-blue">Total</div>
+
+      <div class="cell-yellow left muted">Objetivo post-NPC</div>
+      <div class="cell-yellow" id="tgtWood">0</div>
+      <div class="cell-yellow" id="tgtClay">0</div>
+      <div class="cell-yellow" id="tgtIron">0</div>
+      <div class="cell-yellow" id="tgtCrop">0</div>
+      <div class="cell-total" id="tgtAll">0</div>
+    </div>
+
+    <div class="statusline" id="statusLine"></div>
+
+    <div class="mode-panel" id="modeTimePanel">
+      <div class="mode-title">Opción 2: Tropas por tiempo (excedente)</div>
+      <div class="queues">
+        <div class="qbox">
+          <label class="qcheck"><input id="qBarracksOn" type="checkbox" checked> Cuartel (C)</label>
+          <select id="qBarracksTroop"></select>
+        </div>
+        <div class="qbox">
+          <label class="qcheck"><input id="qStableOn" type="checkbox" checked> Establo (E)</label>
+          <select id="qStableTroop"></select>
+        </div>
+        <div class="qbox">
+          <label class="qcheck"><input id="qWorkshopOn" type="checkbox"> Taller (T)</label>
+          <select id="qWorkshopTroop"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="mode-panel" id="modeExactPanel">
+      <div class="mode-title">Opción 3: Tropa exacta (excedente)</div>
+      <div class="exact-row">
+        <select id="exactTroop"></select>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="subtotal-wrap">
+    <div class="subtotal-title">SUBTOTAL (PLAN)</div>
+    <div class="subtotal-bar">
+      <div class="hdr-blue left">Subtotal →</div>
+      <div class="hdr-blue">Madera</div>
+      <div class="hdr-blue">Barro</div>
+      <div class="hdr-blue">Hierro</div>
+      <div class="hdr-blue">Cereal</div>
+      <div class="hdr-blue">Total</div>
+
+      <div class="cell-white left muted">Requerido</div>
+      <div class="cell-white" id="reqWood">0</div>
+      <div class="cell-white" id="reqClay">0</div>
+      <div class="cell-white" id="reqIron">0</div>
+      <div class="cell-white" id="reqCrop">0</div>
+      <div class="cell-white total-strong" id="reqAll">0</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th class="left">Edificio / Tropa</th>
+        <th>Cant</th>
+        <th>Inicial</th>
+        <th>Final</th>
+        <th>Madera</th>
+        <th>Barro</th>
+        <th>Hierro</th>
+        <th>Cereal</th>
+        <th>Total</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+</div>
+
+<script src="./app.js"></script>
+</body>
+</html>
