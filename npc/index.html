@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+
 <title>NPC Optimizador</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
@@ -33,7 +37,7 @@
       <div class="tool">
         <div class="tool-label">Excedente</div>
         <select id="excessMode">
-          <option value="eq" selected>Opción 1: Equitativo</option>
+          <option value="eq">Opción 1: Equitativo</option>
           <option value="time">Opción 2: Tropas por tiempo</option>
           <option value="exact">Opción 3: Tropa exacta</option>
         </select>
@@ -53,7 +57,7 @@
         <input id="curTotal" type="number" min="0" value="0" placeholder="Total">
       </div>
 
-      <button class="btn" id="addRow" type="button">+ Añadir fila</button>
+      <button class="btn btn-orange" id="addRow" type="button">+ Añadir fila</button>
     </div>
 
     <div class="label-yellow">MATERIAS TOTAL</div>
@@ -78,6 +82,63 @@
 
     <div class="mode-panel" id="modeTimePanel">
       <div class="mode-title">Opción 2: Tropas por tiempo (excedente)</div>
+
+      <div class="train-grid">
+        <div class="train-item">
+          <div class="tool-label">Nivel Cuartel</div>
+          <select id="lvlBarracks"></select>
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Nivel Establo</div>
+          <select id="lvlStable"></select>
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Nivel Taller</div>
+          <select id="lvlWorkshop"></select>
+        </div>
+
+        <div class="train-item">
+          <div class="tool-label">Bono alianza</div>
+          <select id="allyBonus">
+            <option value="0" selected>0%</option>
+            <option value="0.02">2%</option>
+            <option value="0.04">4%</option>
+            <option value="0.06">6%</option>
+            <option value="0.08">8%</option>
+            <option value="0.10">10%</option>
+          </select>
+        </div>
+
+        <div class="train-item">
+          <div class="tool-label">Tropero</div>
+          <select id="trooperBoost">
+            <option value="0" selected>Ninguno</option>
+            <option value="0.25">25%</option>
+            <option value="0.50">50%</option>
+          </select>
+        </div>
+
+        <div class="train-item">
+          <div class="tool-label">Casco Cuartel</div>
+          <select id="helmetBarracks">
+            <option value="0" selected>Ninguno</option>
+            <option value="0.10">10%</option>
+            <option value="0.15">15%</option>
+            <option value="0.20">20%</option>
+          </select>
+        </div>
+
+        <div class="train-item">
+          <div class="tool-label">Casco Caballería</div>
+          <select id="helmetStable">
+            <option value="0" selected>Ninguno</option>
+            <option value="0.10">10%</option>
+            <option value="0.15">15%</option>
+            <option value="0.20">20%</option>
+          </select>
+        </div>
+      </div>
+
       <div class="queues">
         <div class="qbox">
           <label class="qcheck"><input id="qBarracksOn" type="checkbox" checked> Cuartel (C)</label>
@@ -92,6 +153,9 @@
           <select id="qWorkshopTroop"></select>
         </div>
       </div>
+
+      <!-- NUEVA MATRIZ: Resumen de tropas entrenables para Opción 2 -->
+      <div id="timeTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
     </div>
 
     <div class="mode-panel" id="modeExactPanel">
@@ -99,6 +163,9 @@
       <div class="exact-row">
         <select id="exactTroop"></select>
       </div>
+
+      <!-- NUEVA MATRIZ: Resumen de tropas entrenables para Opción 3 -->
+      <div id="exactTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
     </div>
 
   </div>
@@ -143,6 +210,6 @@
 
 </div>
 
-<script src="./app.js"></script>
+<script src="./app.js" defer></script>
 </body>
 </html>
