@@ -145,12 +145,21 @@ function distributeEquitable(total, orderKey){
   return dist
 }
 
-// FIX #1: Usar t.time en lugar de t.tiempo
+// El JSON tiene tiempos a velocidad x3 del servidor.
+// Tiempo base = time_sec × 3  (velocidad neutra)
+// Tiempo servidor = tiempo_base ÷ velocidad_servidor
+// Luego se aplican factores de edificio, casco, alianza y tropero.
 function getEffectiveSecondsForTroop(race, troopName){
   const t = getTroopByName(race, troopName)
   if(!t) return 0
 
-  const base = parseTimeToSec(t.time)
+  const JSON_SPEED   = 3                          // velocidad con la que están capturados los datos
+  const serverSpeed  = Math.max(1, n0($("serverSpeed").value))
+
+  const timeAtJson   = parseTimeToSec(t.time)     // tiempo tal como está en el JSON (a x3)
+  const timeBase     = timeAtJson * JSON_SPEED     // tiempo base (velocidad x1)
+  const timeServer   = timeBase / serverSpeed      // tiempo ajustado al servidor actual
+
   const tipo = String(t.tipo_edificio || "").toUpperCase()
 
   let lvl = 1
@@ -166,7 +175,7 @@ function getEffectiveSecondsForTroop(race, troopName){
   if(tipo === "C") helmet = n0($("helmetBarracks").value)
   if(tipo === "E") helmet = n0($("helmetStable").value)
 
-  const seconds = base * factorB * (1 - ally) * (1 - trooper) * (1 - helmet)
+  const seconds = timeServer * factorB * (1 - ally) * (1 - trooper) * (1 - helmet)
   return Math.max(0, seconds)
 }
 
@@ -703,6 +712,7 @@ async function init(){
   $("trooperBoost").addEventListener("change",   recalc)
   $("helmetBarracks").addEventListener("change", recalc)
   $("helmetStable").addEventListener("change",   recalc)
+  $("serverSpeed").addEventListener("change",    recalc)
 
   $("qBarracksOn").addEventListener("change",    recalc)
   $("qStableOn").addEventListener("change",      recalc)
