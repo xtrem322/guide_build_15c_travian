@@ -1,0 +1,66 @@
+:root{
+  --bg:#f4f7fa;--panel:#fff;--border:#cbd5e1;--text:#0f172a;--muted:#475569;
+  --blue:#2563eb;--blue2:#1d4ed8;--blue-light:#eff6ff;--blue-mid:#dbeafe;--blue-border:#bfdbfe;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-border:#bbf7d0;
+  --orange:#ea580c;--gold:#d97706;--gold-bg:#fffbeb;--gold-border:#fde68a;
+  --danger:#ef4444;
+}
+body.dark{--bg:#22272e;--panel:#2d333b;--border:#444c56;--text:#adbac7;--muted:#768390;--blue-light:#1e2d45;--blue-mid:#1e3a5f;--blue-border:#2563eb;--green-bg:#14261a;--green-border:#166534;--gold-bg:#2a1f0a;--gold-border:#92400e;}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px}
+.wrap{max-width:1400px;margin:0 auto}
+.topline{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.theme-toggle{background:var(--panel);color:var(--text);border:1px solid var(--border);padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px}
+.top-actions{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px}
+.nav-link{color:#0b3a6a;text-decoration:none;font-weight:800}
+.nav-link.active{text-decoration:underline}
+.nav-link:hover{text-decoration:underline}
+.nav-sep{color:var(--muted)}
+.page-title{text-align:center;font-size:36px;margin:6px 0 2px;font-weight:900}
+.subtitle{text-align:center;color:var(--muted);margin-bottom:14px}
+.config-panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.config-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.cfg-item{display:flex;flex-direction:column;gap:4px}
+.cfg-btn{align-self:flex-end}
+.tool-label{font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+select,input[type="number"]{padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:13px}
+.btn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-weight:900;font-size:13px}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover{background:var(--blue2)}
+.btn-add{background:var(--blue-light);border:1px solid var(--blue-border);color:var(--blue);font-size:12px}
+.btn-add:hover{background:var(--blue-mid)}
+.btn-del{background:transparent;border:1px solid var(--border);color:var(--danger);cursor:pointer;padding:4px 8px;border-radius:6px;font-weight:900;font-size:13px}
+.btn-del:hover{background:#fef2f2}
+.section-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.section-title>span:first-child{font-size:15px;font-weight:900}
+.section-hint{font-size:11px;color:var(--muted);font-weight:600}
+.matrix-panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.matrix-header{display:grid;grid-template-columns:1fr 110px 110px 90px 130px 36px;gap:4px;padding:7px 12px;background:var(--blue2);color:#fff;font-size:10px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;}
+.matrix-header>div{text-align:center}.matrix-header>.left{text-align:left}
+.matrix-row{display:grid;grid-template-columns:1fr 110px 110px 90px 130px 36px;gap:4px;padding:5px 12px;border-bottom:1px solid var(--border);align-items:center;background:var(--panel);min-height:38px;}
+.matrix-row:last-child{border-bottom:none}.matrix-row:hover{background:var(--blue-light)}
+.matrix-row select{font-size:12px;padding:5px 6px}.matrix-row input[type="number"]{font-size:12px;padding:5px 6px;text-align:center;width:100%}
+.mc{display:flex;align-items:center;justify-content:center}.mc.left{justify-content:flex-start}
+.mc-val{font-size:12px;font-weight:900;color:var(--text)}.mc-muted{font-size:12px;color:var(--muted)}
+.summary-box{border-radius:10px;padding:14px 18px;margin-bottom:14px}
+.summary-current{background:var(--blue);color:#fff}.summary-future{background:var(--green);color:#fff}
+.summary-title{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.7px;opacity:.85;margin-bottom:10px}
+.summary-stats{display:flex;flex-wrap:wrap;gap:10px}
+.stat-chip{background:rgba(255,255,255,.18);border-radius:8px;padding:8px 14px;display:flex;flex-direction:column;gap:2px;min-width:120px}
+.stat-label{font-size:10px;opacity:.8;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.stat-val{font-size:22px;font-weight:900}
+.result-table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.result-table-header{display:grid;grid-template-columns:36px 1fr 90px 90px 130px 110px 80px 90px;gap:4px;padding:7px 12px;background:var(--blue2);color:#fff;font-size:10px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;}
+.result-table-header>div{text-align:center}.result-table-header>.left{text-align:left}
+.result-row{display:grid;grid-template-columns:36px 1fr 90px 90px 130px 110px 80px 90px;gap:4px;padding:5px 12px;border-bottom:1px solid var(--border);align-items:center;background:var(--panel);min-height:36px;}
+.result-row:last-child{border-bottom:none}.result-row:hover{background:var(--blue-light)}
+.result-row.highlight{background:var(--gold-bg);border-left:3px solid var(--gold)}
+.rc{display:flex;align-items:center;justify-content:center;font-size:12px}.rc.left{justify-content:flex-start}
+.rc-num{font-size:11px;font-weight:900;color:var(--muted)}.rc-name{font-size:13px;font-weight:700}
+.rc-level{font-family:monospace;font-size:12px;font-weight:900;color:var(--muted)}
+.rc-pc{font-size:14px;font-weight:900;color:var(--green)}.rc-cost{font-size:12px;font-weight:700}
+.rc-ratio{font-size:12px;font-weight:900;color:var(--blue)}.rc-ratio.good{color:var(--green)}.rc-ratio.bad{color:var(--danger)}
+.rc-consume{font-size:12px;font-weight:700;color:var(--orange)}.rc-accum{font-size:13px;font-weight:900;color:var(--blue2)}
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted);font-weight:700}
+.empty-icon{font-size:40px;margin-bottom:8px}
+.matrix-footer{padding:10px 12px}

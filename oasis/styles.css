@@ -1,0 +1,155 @@
+:root{
+  --bg:#f4f7fa; --panel:#ffffff; --border:#cbd5e1;
+  --text:#0f172a; --muted:#475569;
+  --blue:#2563eb; --blue2:#1d4ed8;
+  --blue-light:#eff6ff; --blue-mid:#dbeafe; --blue-border:#bfdbfe;
+  --orange:#ea580c; --danger:#ef4444;
+  --easy:#16a34a; --easy-bg:#f0fdf4; --easy-border:#bbf7d0;
+  --medium:#d97706; --medium-bg:#fffbeb; --medium-border:#fde68a;
+  --hard:#dc2626; --hard-bg:#fef2f2; --hard-border:#fecaca;
+}
+body.dark{
+  --bg:#22272e; --panel:#2d333b; --border:#444c56;
+  --text:#adbac7; --muted:#768390;
+  --blue-light:#1e2d45; --blue-mid:#1e3a5f; --blue-border:#2563eb;
+  --easy-bg:#14261a; --easy-border:#166534;
+  --medium-bg:#2a1f0a; --medium-border:#92400e;
+  --hard-bg:#2a1010; --hard-border:#991b1b;
+}
+
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:13px}
+.wrap{max-width:1600px;margin:0 auto}
+
+/* ── Top bar ── */
+.topline{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.theme-toggle{background:var(--panel);color:var(--text);border:1px solid var(--border);padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px}
+.top-actions{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px}
+.nav-link{color:#0b3a6a;text-decoration:none;font-weight:800}
+.nav-link.active{text-decoration:underline}
+.nav-link:hover{text-decoration:underline}
+.nav-sep{color:var(--muted)}
+
+/* ── Títulos ── */
+.page-title{text-align:center;font-size:36px;margin:6px 0 2px;font-weight:900}
+.subtitle{text-align:center;color:var(--muted);margin-bottom:14px;font-size:13px}
+
+/* ── Config panel ── */
+.config-panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.config-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+.cfg-item{display:flex;flex-direction:column;gap:4px}
+.tool-label{font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+select,input[type="number"]{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:13px}
+
+/* ── Import row ── */
+.import-row{display:flex;gap:14px;align-items:flex-start}
+.import-ta-wrap{flex:1}
+.import-ta{
+  width:100%;height:110px;padding:8px 10px;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);
+  font-size:12px;font-family:monospace;
+  resize:vertical;
+}
+.import-ta:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+
+.import-right{display:flex;flex-direction:column;gap:8px;min-width:320px}
+
+/* ── Selectores de tropa en el import ── */
+.import-troops-wrap{display:flex;flex-direction:column;gap:6px}
+.import-troop-row{display:grid;grid-template-columns:1fr 70px auto;gap:6px;align-items:center}
+.import-troop-row select{font-size:12px;padding:5px 7px}
+.import-troop-row input{font-size:12px;padding:5px 7px;text-align:center}
+.btn-add-troop-import{
+  background:var(--blue-light);border:1px solid var(--blue-border);
+  color:var(--blue);cursor:pointer;padding:5px 10px;
+  border-radius:6px;font-weight:900;font-size:12px;white-space:nowrap;align-self:flex-start;
+}
+.btn-add-troop-import:hover{background:var(--blue-mid)}
+.btn-rm-troop{background:transparent;border:1px solid var(--border);color:var(--danger);cursor:pointer;padding:4px 8px;border-radius:6px;font-weight:900;font-size:13px;line-height:1}
+
+/* ── Botones procesar / limpiar ── */
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:900;font-size:13px}
+.btn-process{background:var(--blue);color:#fff;width:100%}
+.btn-process:hover{background:var(--blue2)}
+.btn-clear-all{background:transparent;border:1px solid var(--border);color:var(--muted);width:100%;font-size:12px}
+.btn-clear-all:hover{background:var(--hard-bg);color:var(--danger)}
+
+/* ── Global result ── */
+.global-result{background:var(--blue);border-radius:10px;padding:12px 16px;margin-bottom:12px;color:#fff}
+.gr-title{font-size:10px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;opacity:.8;margin-bottom:8px}
+.gr-troop-list{display:flex;flex-wrap:wrap;gap:8px}
+.gr-troop-chip{background:rgba(255,255,255,.18);border-radius:7px;padding:6px 12px;display:flex;align-items:center;gap:8px}
+.gr-troop-name{font-size:11px;opacity:.8;font-weight:700}
+.gr-troop-qty{font-size:18px;font-weight:900}
+
+/* ── Empty state ── */
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted);font-weight:700}
+.empty-icon{font-size:40px;margin-bottom:8px}
+
+/* ══ TABLA MATRICIAL ══════════════════════════════════════════════ */
+.oasis-table-header{
+  display:grid;
+  grid-template-columns: 36px 64px 1fr 72px 1fr 72px 1fr 72px 90px 70px 70px 48px 32px;
+  gap:4px;align-items:center;
+  padding:6px 10px;
+  background:var(--blue2);color:#fff;
+  border-radius:10px 10px 0 0;
+  font-size:10px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;
+}
+.oasis-table-header > div{text-align:center}
+.oasis-table-header > div.left{text-align:left}
+
+.oasis-table-body{border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;overflow:hidden}
+
+.oasis-row{
+  display:grid;
+  grid-template-columns: 36px 64px 1fr 72px 1fr 72px 1fr 72px 90px 70px 70px 48px 32px;
+  gap:4px;align-items:center;
+  padding:4px 10px;
+  border-bottom:1px solid var(--border);
+  background:var(--panel);
+  min-height:40px;
+}
+.oasis-row:last-child{border-bottom:none}
+.oasis-row:hover{background:var(--blue-light)}
+
+.oc{display:flex;align-items:center;justify-content:center}
+.oc.left{justify-content:flex-start}
+.oc-num{font-size:11px;font-weight:900;color:var(--muted)}
+.oc input[type="number"]{padding:4px 6px!important;font-size:12px!important;border-radius:6px;text-align:center;width:100%}
+.oc select{font-size:11px!important;padding:4px 5px!important;width:100%}
+.oc-dist{font-size:12px;font-weight:900;color:var(--text);text-align:center}
+.oc-slow{font-size:11px;font-weight:700;color:var(--muted);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px}
+.oc-time{font-family:monospace;font-size:12px;font-weight:900;color:var(--text);text-align:center}
+.oc-needed{font-size:16px;font-weight:900;color:var(--blue);text-align:center}
+.oc-needed.zero{color:var(--muted);font-size:12px}
+.btn-del{background:transparent;border:1px solid var(--border);color:var(--danger);cursor:pointer;padding:3px 7px;border-radius:6px;font-weight:900;font-size:13px;line-height:1}
+.btn-del:hover{background:var(--hard-bg)}
+.troop-slot-sel,.troop-slot-qty{display:flex;align-items:center}
+.btn-add-troop-inline{background:var(--blue-light);border:1px solid var(--blue-border);color:var(--blue);cursor:pointer;padding:3px 8px;border-radius:6px;font-weight:900;font-size:11px;white-space:nowrap}
+.btn-add-troop-inline:hover{background:var(--blue-mid)}
+
+/* ── Tropas readonly en la tabla ── */
+.oc-troop-name{
+  font-size:12px;font-weight:700;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.oc-troop-qty{
+  font-size:13px;font-weight:900;color:var(--muted);
+  background:var(--blue-light);border-radius:5px;
+  padding:2px 7px;border:1px solid var(--blue-border);
+}
+
+/* ── Info de ciclos en el resultado global ── */
+.gr-cycles{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.12);border-radius:7px;
+  padding:6px 14px;margin-left:4px;
+}
+.gr-cycle-label{font-size:11px;opacity:.8;font-weight:700}
+.gr-cycle-num{
+  font-size:22px;font-weight:900;
+  background:rgba(255,255,255,.2);border-radius:6px;
+  padding:0 10px;
+}

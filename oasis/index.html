@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+<title>Farm Oasis</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div id="nav"></div>
+ <script src="../nav.js" defer></script>
+
+  <h1 class="page-title">Farm Oasis</h1>
+  <div class="subtitle">Tropas necesarias para saquear oasis continuamente</div>
+
+  <!-- CONFIG GLOBAL + IMPORT -->
+  <div class="config-panel">
+    <div class="config-grid">
+
+      <div class="cfg-item">
+        <div class="tool-label">Raza</div>
+        <select id="raceSelect"></select>
+      </div>
+      <div class="cfg-item">
+        <div class="tool-label">Velocidad servidor</div>
+        <select id="serverSpeed">
+          <option value="1">x1</option>
+          <option value="2" selected>x2</option>
+          <option value="3">x3</option>
+          <option value="5">x5</option>
+          <option value="10">x10</option>
+        </select>
+      </div>
+      <div class="cfg-item">
+        <div class="tool-label">Envío cada (min)</div>
+        <input id="intervalMin" type="number" min="1" value="4">
+      </div>
+
+    </div>
+
+    <!-- IMPORT ROW -->
+    <div class="import-row">
+
+      <div class="import-ta-wrap">
+        <div class="tool-label" style="margin-bottom:5px">Pega el texto del juego</div>
+        <textarea id="taImport" class="import-ta" placeholder="Oasis desocupado03.2&#10;1&#10;24.2.2026&#10;Oasis desocupado04&#10;1&#10;24.2.2026&#10;..."></textarea>
+      </div>
+
+      <div class="import-right">
+        <div class="tool-label" style="margin-bottom:5px">Tropas para este grupo</div>
+        <div id="importTroops" class="import-troops-wrap"></div>
+        <button class="btn btn-process" id="btnProcess" type="button">▶ Procesar</button>
+        <button class="btn btn-clear-all" id="btnClearAll" type="button">🗑 Limpiar tabla</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- RESULTADO GLOBAL -->
+  <div id="globalResult" class="global-result" style="display:none">
+    <div class="gr-title">Tropas totales necesarias</div>
+    <div id="globalTroopList" class="gr-troop-list"></div>
+  </div>
+
+  <!-- TABLA RESULTANTE -->
+  <div id="oasisTableWrap" style="display:none">
+    <div class="oasis-table-header">
+      <div>#</div>
+      <div>Dist.</div>
+      <div class="left">Tropa 1</div><div>Cant</div>
+      <div class="left">Tropa 2</div><div>Cant</div>
+      <div class="left">Tropa 3</div><div>Cant</div>
+      <div>Limitante</div>
+      <div>Ida</div>
+      <div>I+V</div>
+      <div title="Grupos de tropas necesarios para atacar sin parar cada X minutos">Grupos</div>
+      <div></div>
+    </div>
+    <div class="oasis-table-body" id="oasisTableBody"></div>
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🏕️</div>
+    <div>Pega oasis y presiona Procesar para comenzar</div>
+  </div>
+
+</div>
+<script src="./app.js" defer></script>
+</body>
+</html>
