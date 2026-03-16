@@ -23,6 +23,8 @@ body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:'S
 .cfg-item{display:flex;flex-direction:column;gap:4px}
 .cfg-btn{align-self:flex-end}
 .tool-label{font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+.tool-check{display:flex;align-items:center;gap:8px;min-height:38px}
+.tool-check input{margin:0}
 select,input[type="number"]{padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:13px}
 .btn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-weight:900;font-size:13px}
 .btn-blue{background:var(--blue);color:#fff}

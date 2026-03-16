@@ -24,6 +24,10 @@ function currentVillageType(){
   return $('villageType')?.value || 'capital'
 }
 
+function hasGreatStorageRelic(){
+  return Boolean($('hasGreatStorageRelic')?.checked)
+}
+
 function buildingAllowedForContext(building){
   const races = Array.isArray(building.raza) ? building.raza : []
   const raceOk = races.length === 0 || races.includes(currentRace())
@@ -44,6 +48,18 @@ function refreshAllowedBuildings(){
       return Number(n.pc || 0) - prevPc > 0
     })
   )
+}
+
+function buildRequirementsMet(building, currentLevels){
+  const currentLevel = currentLevels.get(building.nombre) || 0
+  if(currentLevel > 0) return true
+
+  if(building.requiresGreatStorageRelic && !hasGreatStorageRelic()){
+    return false
+  }
+
+  const prereqs = Array.isArray(building.prerequisitos) ? building.prerequisitos : []
+  return prereqs.every(req => (currentLevels.get(req.nombre) || 0) >= Number(req.nivel || 0))
 }
 
 function setTheme(){
@@ -118,6 +134,13 @@ async function loadCatalog(){
     raza: Array.isArray(b.raza) ? b.raza.map(x => String(x).toUpperCase()) : [],
     capital_only: b.capital_only !== false,
     otherVillageOnly: b.otherVillageOnly !== false,
+    prerequisitos: Array.isArray(b.prerequisitos)
+      ? b.prerequisitos.map(req => ({
+          nombre: String(req.nombre ?? '').trim(),
+          nivel: Number(req.nivel ?? 0),
+        })).filter(req => req.nombre && Number.isFinite(req.nivel) && req.nivel > 0)
+      : [],
+    requiresGreatStorageRelic: b.requiresGreatStorageRelic === true,
     niveles: (b.niveles ?? b.levels ?? []).map(n => ({
       nivel:   Number(n.nivel ?? n.level ?? 0),
       total:   Number(n.total ?? 0),
@@ -210,6 +233,7 @@ function generateCandidates(currentLevels){
     const maxLevel  = b.niveles[b.niveles.length - 1].nivel
 
     if(currLevel >= maxLevel) continue  // ya al máximo
+    if(!buildRequirementsMet(b, currentLevels)) continue
 
     // Encuentra el siguiente nivel que otorga PC >= el siguiente disponible
     // Puede ser que los primeros niveles tras currLevel no tengan PC
@@ -503,6 +527,7 @@ function init(){
   $('btnAddBuilding').addEventListener('click', addMatrixRow)
   $('raceSelect').addEventListener('change', renderMatrix)
   $('villageType').addEventListener('change', renderMatrix)
+  $('hasGreatStorageRelic').addEventListener('change', renderMatrix)
 
   loadCatalog()
 }

@@ -251,7 +251,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "ACADEMIA",
+        "nivel": 5
+      },
+      {
+        "nombre": "HERRERIA",
+        "nivel": 3
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "Embajada",
@@ -465,7 +476,14 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 1
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRANJA",
@@ -731,7 +749,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "ALMACEN",
@@ -985,7 +1005,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRANERO",
@@ -1239,7 +1261,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "CUARTEL",
@@ -1493,7 +1517,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 3
+      },
+      {
+        "nombre": "PLAZA REUNIONES",
+        "nivel": 1
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "PLAZA TORNEO",
@@ -1747,7 +1782,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "HOGAR DEL HEROE",
@@ -2001,7 +2038,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 3
+      },
+      {
+        "nombre": "PLAZA REUNIONES",
+        "nivel": 1
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "HERRERIA",
@@ -2255,7 +2303,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 3
+      },
+      {
+        "nombre": "ACADEMIA",
+        "nivel": 1
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "ACADEMIA",
@@ -2509,7 +2568,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "CUARTEL",
+        "nivel": 3
+      },
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 3
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "ESCONDITE",
@@ -2643,7 +2713,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "RESIDENCIA",
@@ -2897,7 +2969,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "PLAZA REUNIONES",
@@ -3151,7 +3225,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MOLINO",
@@ -3225,7 +3301,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "PANADERIA",
@@ -3299,7 +3377,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "CISTERNAS",
@@ -3549,7 +3629,9 @@
       "EGIPTO"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "LEÑADOR",
@@ -3803,7 +3885,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MINA DE HIERRO",
@@ -4057,7 +4141,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "BARRERA",
@@ -4323,7 +4409,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "LADRILLAR",
@@ -4397,7 +4485,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "SERRERIA",
@@ -4471,7 +4561,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "FUNDICION DE HIERRO",
@@ -4545,7 +4637,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MERCADO",
@@ -4799,7 +4893,22 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 3
+      },
+      {
+        "nombre": "ALMACEN",
+        "nivel": 1
+      },
+      {
+        "nombre": "GRANERO",
+        "nivel": 1
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "TALLER",
@@ -5053,7 +5162,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "ACADEMIA",
+        "nivel": 10
+      },
+      {
+        "nombre": "EDIFICIO PRINCIPAL",
+        "nivel": 5
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "FIESTA",
@@ -5079,7 +5199,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "AYUNTAMIENTO",
@@ -5333,7 +5455,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MURALLA DE ROCAS",
@@ -5587,7 +5711,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "EDIFICIO PRINCIPAL",
@@ -5841,7 +5967,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "COLONO",
@@ -5867,7 +5995,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "INVESTIGAR CABECILLA",
@@ -5893,7 +6023,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRAN FIESTA",
@@ -5919,7 +6051,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRAN GRANERO",
@@ -6173,7 +6307,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": true
   },
   {
     "nombre": "GRAN ALMACEN",
@@ -6427,7 +6563,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": true
   },
   {
     "nombre": "CANTERO",
@@ -6681,7 +6819,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": false
+    "otherVillageOnly": false,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "PALACIO",
@@ -6935,7 +7075,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": false,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "TERRAPLEN",
@@ -7185,7 +7327,9 @@
       "GERMANO"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MEJORA LANCERO",
@@ -7439,7 +7583,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MEJORA PORRA",
@@ -7693,7 +7839,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MEJORA TEUTON",
@@ -7947,7 +8095,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "MEJORA ARIETE",
@@ -8201,7 +8351,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRAN CUARTEL",
@@ -8455,7 +8607,14 @@
       "HUNOS"
     ],
     "capital_only": false,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "CUARTEL",
+        "nivel": 20
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "GRAN ESTABLO",
@@ -8709,7 +8868,14 @@
       "HUNOS"
     ],
     "capital_only": false,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "ESTABLO",
+        "nivel": 20
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "HOSPITAL",
@@ -8963,7 +9129,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "CABECILLA",
@@ -8989,7 +9157,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "OFICINA DE COMERCIO",
@@ -9243,7 +9413,18 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [
+      {
+        "nombre": "ESTABLO",
+        "nivel": 10
+      },
+      {
+        "nombre": "MERCADO",
+        "nivel": 20
+      }
+    ],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "TESORO",
@@ -9497,7 +9678,9 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   },
   {
     "nombre": "CENTRO DE MANDO",
@@ -9747,6 +9930,8 @@
       "HUNOS"
     ],
     "capital_only": true,
-    "otherVillageOnly": true
+    "otherVillageOnly": true,
+    "prerequisitos": [],
+    "requiresGreatStorageRelic": false
   }
 ]
