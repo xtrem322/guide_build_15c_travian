@@ -14,6 +14,7 @@ let matrixCounter = 0
 /* ── Helpers ── */
 const n0 = v => { const x=Number(v); return isFinite(x)?x:0 }
 const fmtNum = n => n.toLocaleString('es-PE')
+const fmtBuildingName = name => String(name || '').toUpperCase()
 
 function setTheme(){
   const dark = localStorage.getItem('theme')==='dark'
@@ -348,7 +349,7 @@ function renderResultTable(steps){
     const ratioClass = s.ratio <= p33 ? 'good' : s.ratio >= p66 ? 'bad' : ''
     row.innerHTML = `
       <div class="rc"><span class="rc-num">#${s.stepNum}</span></div>
-      <div class="rc left"><span class="rc-name">${s.buildingName}</span></div>
+      <div class="rc left"><span class="rc-name">${fmtBuildingName(s.buildingName)}</span></div>
       <div class="rc"><span class="rc-level">Nv${s.fromLevel} → ${s.toLevel}</span></div>
       <div class="rc"><span class="rc-pc">+${s.pcGained}</span></div>
       <div class="rc"><span class="rc-cost">${fmtNum(s.costStep)}</span></div>
@@ -381,7 +382,7 @@ function renderMatrixRow(row, idx){
   sel.innerHTML = '<option value="">-- Edificio --</option>'
   PC_BUILDINGS.forEach(b => {
     const o = document.createElement('option')
-    o.value = b.nombre; o.textContent = b.nombre
+    o.value = b.nombre; o.textContent = fmtBuildingName(b.nombre)
     sel.appendChild(o)
   })
   sel.value = row.buildingName || ''
