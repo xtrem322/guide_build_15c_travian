@@ -16,6 +16,36 @@ const n0 = v => { const x=Number(v); return isFinite(x)?x:0 }
 const fmtNum = n => n.toLocaleString('es-PE')
 const fmtBuildingName = name => String(name || '').toUpperCase()
 
+function currentRace(){
+  return $('raceSelect')?.value || 'HUNOS'
+}
+
+function currentVillageType(){
+  return $('villageType')?.value || 'capital'
+}
+
+function buildingAllowedForContext(building){
+  const races = Array.isArray(building.raza) ? building.raza : []
+  const raceOk = races.length === 0 || races.includes(currentRace())
+  const villageOk = currentVillageType() === 'capital'
+    ? building.capital_only !== false
+    : building.otherVillageOnly !== false
+  return raceOk && villageOk
+}
+
+function refreshAllowedBuildings(){
+  PC_BUILDINGS = CATALOG.filter(b =>
+    buildingAllowedForContext(b) &&
+    b.niveles.some(n => {
+      const lvl = n.nivel
+      if(lvl <= 0) return false
+      const prev = b.niveles.find(x => x.nivel === lvl - 1)
+      const prevPc = prev ? Number(prev.pc || 0) : 0
+      return Number(n.pc || 0) - prevPc > 0
+    })
+  )
+}
+
 function setTheme(){
   const dark = localStorage.getItem('theme')==='dark'
   document.body.classList.toggle('dark', dark)
@@ -85,6 +115,9 @@ async function loadCatalog(){
   // ✅ Normaliza campos y tipos + ordena niveles
   CATALOG = arr.map(b => ({
     nombre: String(b.nombre ?? b.name ?? '').trim(),
+    raza: Array.isArray(b.raza) ? b.raza.map(x => String(x).toUpperCase()) : [],
+    capital_only: b.capital_only !== false,
+    otherVillageOnly: b.otherVillageOnly !== false,
     niveles: (b.niveles ?? b.levels ?? []).map(n => ({
       nivel:   Number(n.nivel ?? n.level ?? 0),
       total:   Number(n.total ?? 0),
@@ -99,16 +132,7 @@ async function loadCatalog(){
     .sort((a,b)=>a.nivel-b.nivel)
   })).filter(b => b.nombre && b.niveles.length)
 
-  // ✅ aquí ya no revienta porque CATALOG ES array sí o sí
-  PC_BUILDINGS = CATALOG.filter(b =>
-  b.niveles.some(n => {
-    const lvl = n.nivel
-    if(lvl <= 0) return false
-    const prev = b.niveles.find(x => x.nivel === lvl - 1)
-    const prevPc = prev ? Number(prev.pc || 0) : 0
-    return Number(n.pc || 0) - prevPc > 0
-  })
-)
+  refreshAllowedBuildings()
 
   console.log('[CULTURA] CATALOG=', CATALOG.length, 'PC_BUILDINGS=', PC_BUILDINGS.length)
 
@@ -365,9 +389,28 @@ function renderResultTable(steps){
    MATRIZ DE LA ALDEA
    ══════════════════════════════════════════════════════════════════ */
 function renderMatrix(){
+  refreshAllowedBuildings()
+
+  let changed = false
+  villageMatrix.forEach(row => {
+    if(row.buildingName){
+      const b = CATALOG.find(x => x.nombre === row.buildingName)
+      if(!b || !buildingAllowedForContext(b)){
+        row.buildingName = ''
+        row.currentLevel = 0
+        changed = true
+      }
+    }
+  })
+
   const body = $('matrixBody')
   body.innerHTML = ''
   villageMatrix.forEach((row, idx) => renderMatrixRow(row, idx))
+
+  if(changed){
+    const current = calcCurrentState()
+    showCurrentSummary(current)
+  }
 }
 
 function renderMatrixRow(row, idx){
@@ -458,6 +501,8 @@ function init(){
 
   $('btnCalc').addEventListener('click', calculate)
   $('btnAddBuilding').addEventListener('click', addMatrixRow)
+  $('raceSelect').addEventListener('change', renderMatrix)
+  $('villageType').addEventListener('change', renderMatrix)
 
   loadCatalog()
 }
