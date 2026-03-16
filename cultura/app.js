@@ -11,6 +11,23 @@ let PC_BUILDINGS = []
 let villageMatrix = []   // [{buildingName, currentLevel}]
 let matrixCounter = 0
 
+const RESOURCE_LAYOUTS = {
+  '3-4-5-6': { 'LEÑADOR': 3, 'LADRILLAR': 4, 'MINA DE HIERRO': 5, 'GRANJA': 6 },
+  '3-5-4-6': { 'LEÑADOR': 3, 'LADRILLAR': 5, 'MINA DE HIERRO': 4, 'GRANJA': 6 },
+  '4-4-4-6': { 'LEÑADOR': 4, 'LADRILLAR': 4, 'MINA DE HIERRO': 4, 'GRANJA': 6 },
+  '4-5-3-6': { 'LEÑADOR': 4, 'LADRILLAR': 5, 'MINA DE HIERRO': 3, 'GRANJA': 6 },
+  '5-4-3-6': { 'LEÑADOR': 5, 'LADRILLAR': 4, 'MINA DE HIERRO': 3, 'GRANJA': 6 },
+  '5-3-4-6': { 'LEÑADOR': 5, 'LADRILLAR': 3, 'MINA DE HIERRO': 4, 'GRANJA': 6 },
+  '4-3-4-7': { 'LEÑADOR': 4, 'LADRILLAR': 3, 'MINA DE HIERRO': 4, 'GRANJA': 7 },
+  '4-4-3-7': { 'LEÑADOR': 4, 'LADRILLAR': 4, 'MINA DE HIERRO': 3, 'GRANJA': 7 },
+  '3-4-4-7': { 'LEÑADOR': 3, 'LADRILLAR': 4, 'MINA DE HIERRO': 4, 'GRANJA': 7 },
+  '3-3-3-9': { 'LEÑADOR': 3, 'LADRILLAR': 3, 'MINA DE HIERRO': 3, 'GRANJA': 9 },
+  '1-1-1-15': { 'LEÑADOR': 1, 'LADRILLAR': 1, 'MINA DE HIERRO': 1, 'GRANJA': 15 },
+  '0-0-0-18': { 'LEÑADOR': 0, 'LADRILLAR': 0, 'MINA DE HIERRO': 0, 'GRANJA': 18 },
+}
+
+const RESOURCE_BUILDINGS = ['LEÑADOR', 'LADRILLAR', 'MINA DE HIERRO', 'GRANJA']
+
 /* ── Helpers ── */
 const n0 = v => { const x=Number(v); return isFinite(x)?x:0 }
 const fmtNum = n => n.toLocaleString('es-PE')
@@ -22,6 +39,10 @@ function currentRace(){
 
 function currentVillageType(){
   return $('villageType')?.value || 'capital'
+}
+
+function currentVillageLayout(){
+  return $('villageLayout')?.value || ''
 }
 
 function hasGreatStorageRelic(){
@@ -60,6 +81,33 @@ function buildRequirementsMet(building, currentLevels){
 
   const prereqs = Array.isArray(building.prerequisitos) ? building.prerequisitos : []
   return prereqs.every(req => (currentLevels.get(req.nombre) || 0) >= Number(req.nivel || 0))
+}
+
+function applyVillageLayout(){
+  const layout = RESOURCE_LAYOUTS[currentVillageLayout()]
+  if(!layout) return
+
+  const existingByName = new Map(
+    villageMatrix
+      .filter(row => RESOURCE_BUILDINGS.includes(row.buildingName))
+      .map(row => [row.buildingName, row])
+  )
+
+  const nonResourceRows = villageMatrix.filter(row => !RESOURCE_BUILDINGS.includes(row.buildingName))
+  const resourceRows = RESOURCE_BUILDINGS
+    .filter(name => layout[name] > 0)
+    .map(name => {
+      const existing = existingByName.get(name)
+      if(existing){
+        existing.quantity = layout[name]
+        return existing
+      }
+      matrixCounter++
+      return { id: matrixCounter, buildingName: name, currentLevel: 0, quantity: layout[name] }
+    })
+
+  villageMatrix = [...resourceRows, ...nonResourceRows]
+  renderMatrix()
 }
 
 function setTheme(){
@@ -161,8 +209,9 @@ async function loadCatalog(){
 
   renderMatrix()
 
-  // UX: que aparezca 1 fila por defecto
-  if(villageMatrix.length === 0){
+  if(currentVillageLayout()){
+    applyVillageLayout()
+  }else if(villageMatrix.length === 0){
     addMatrixRow()
   }
 }
@@ -209,9 +258,10 @@ function calcCurrentState(){
   let totalPC = 0, totalConsumption = 0, totalCost = 0
   for(const row of villageMatrix){
     if(!row.buildingName || row.currentLevel <= 0) continue
-    totalPC          += accumulatedPC(row.buildingName, row.currentLevel)
-    totalConsumption += accumulatedConsumption(row.buildingName, row.currentLevel)
-    totalCost        += accumulatedCost(row.buildingName, row.currentLevel)
+    const quantity = Math.max(1, Math.floor(n0(row.quantity || 1)))
+    totalPC          += accumulatedPC(row.buildingName, row.currentLevel) * quantity
+    totalConsumption += accumulatedConsumption(row.buildingName, row.currentLevel) * quantity
+    totalCost        += accumulatedCost(row.buildingName, row.currentLevel) * quantity
   }
   return {totalPC, totalConsumption, totalCost}
 }
@@ -227,10 +277,19 @@ function calcCurrentState(){
 function generateCandidates(currentLevels){
   // currentLevels: Map<buildingName, level>
   const candidates = []
+  const quantities = new Map()
+
+  villageMatrix.forEach(row => {
+    if(row.buildingName){
+      const current = quantities.get(row.buildingName) || 0
+      quantities.set(row.buildingName, current + Math.max(1, Math.floor(n0(row.quantity || 1))))
+    }
+  })
 
   for(const b of PC_BUILDINGS){
     const currLevel = currentLevels.get(b.nombre) || 0
     const maxLevel  = b.niveles[b.niveles.length - 1].nivel
+    const quantity = quantities.get(b.nombre) || 1
 
     if(currLevel >= maxLevel) continue  // ya al máximo
     if(!buildRequirementsMet(b, currentLevels)) continue
@@ -257,15 +316,19 @@ function generateCandidates(currentLevels){
 
     if(totalPCStep <= 0) continue  // no hay más niveles con PC
 
-    const ratio = totalCostStep / totalPCStep
+    const totalCostForQuantity = totalCostStep * quantity
+    const totalPCForQuantity = totalPCStep * quantity
+    const totalConsumForQuantity = totalConsumStep * quantity
+    const ratio = totalCostForQuantity / totalPCForQuantity
 
     candidates.push({
       buildingName: b.nombre,
       fromLevel,
       toLevel,
-      pcGained:    totalPCStep,
-      costStep:    totalCostStep,
-      consumStep:  totalConsumStep,
+      quantity,
+      pcGained:    totalPCForQuantity,
+      costStep:    totalCostForQuantity,
+      consumStep:  totalConsumForQuantity,
       ratio,
     })
   }
@@ -320,6 +383,7 @@ function calculate(){
     steps.push({
       stepNum:   steps.length + 1,
       buildingName: best.buildingName,
+      quantity:     best.quantity,
       fromLevel:    best.fromLevel,
       toLevel:      best.toLevel,
       pcGained:     best.pcGained,
@@ -398,6 +462,7 @@ function renderResultTable(steps){
     row.innerHTML = `
       <div class="rc"><span class="rc-num">#${s.stepNum}</span></div>
       <div class="rc left"><span class="rc-name">${fmtBuildingName(s.buildingName)}</span></div>
+      <div class="rc"><span class="rc-qty">x${fmtNum(s.quantity || 1)}</span></div>
       <div class="rc"><span class="rc-level">Nv${s.fromLevel} → ${s.toLevel}</span></div>
       <div class="rc"><span class="rc-pc">+${s.pcGained}</span></div>
       <div class="rc"><span class="rc-cost">${fmtNum(s.costStep)}</span></div>
@@ -417,6 +482,7 @@ function renderMatrix(){
 
   let changed = false
   villageMatrix.forEach(row => {
+    row.quantity = Math.max(1, Math.floor(n0(row.quantity || 1)))
     if(row.buildingName){
       const b = CATALOG.find(x => x.nombre === row.buildingName)
       if(!b || !buildingAllowedForContext(b)){
@@ -459,6 +525,16 @@ function renderMatrixRow(row, idx){
     updateMatrixRowCalc(row)
   })
   selD.appendChild(sel); div.appendChild(selD)
+
+  /* Cantidad */
+  const qtyD = document.createElement('div'); qtyD.className = 'mc'
+  const qtyInp = document.createElement('input'); qtyInp.type = 'number'; qtyInp.min = '1'; qtyInp.value = String(Math.max(1, Math.floor(n0(row.quantity || 1))))
+  qtyInp.addEventListener('input', () => {
+    row.quantity = Math.max(1, Math.floor(n0(qtyInp.value || 1)))
+    qtyInp.value = String(row.quantity)
+    updateMatrixRowCalc(row)
+  })
+  qtyD.appendChild(qtyInp); div.appendChild(qtyD)
 
   /* Nivel actual */
   const lvlD = document.createElement('div'); lvlD.className = 'mc'
@@ -504,9 +580,10 @@ function updateMatrixRowCalc(row){
     const cost = $(`mcost-${row.id}`); if(cost) cost.textContent = '—'
     return
   }
-  const pc   = accumulatedPC(row.buildingName, row.currentLevel)
-  const con  = accumulatedConsumption(row.buildingName, row.currentLevel)
-  const cost = accumulatedCost(row.buildingName, row.currentLevel)
+  const quantity = Math.max(1, Math.floor(n0(row.quantity || 1)))
+  const pc   = accumulatedPC(row.buildingName, row.currentLevel) * quantity
+  const con  = accumulatedConsumption(row.buildingName, row.currentLevel) * quantity
+  const cost = accumulatedCost(row.buildingName, row.currentLevel) * quantity
   const pcEl = $(`mpc-${row.id}`); if(pcEl) pcEl.textContent = fmtNum(pc)
   const conEl = $(`mcon-${row.id}`); if(conEl) conEl.textContent = fmtNum(con)
   const costEl = $(`mcost-${row.id}`); if(costEl) costEl.textContent = fmtNum(cost)
@@ -514,7 +591,7 @@ function updateMatrixRowCalc(row){
 
 function addMatrixRow(){
   matrixCounter++
-  const row = {id: matrixCounter, buildingName: '', currentLevel: 0}
+  const row = {id: matrixCounter, buildingName: '', currentLevel: 0, quantity: 1}
   villageMatrix.push(row)
   renderMatrixRow(row, villageMatrix.length - 1)
 }
@@ -525,8 +602,15 @@ function init(){
 
   $('btnCalc').addEventListener('click', calculate)
   $('btnAddBuilding').addEventListener('click', addMatrixRow)
-  $('raceSelect').addEventListener('change', renderMatrix)
-  $('villageType').addEventListener('change', renderMatrix)
+  $('raceSelect').addEventListener('change', () => {
+    renderMatrix()
+    applyVillageLayout()
+  })
+  $('villageType').addEventListener('change', () => {
+    renderMatrix()
+    applyVillageLayout()
+  })
+  $('villageLayout')?.addEventListener('change', applyVillageLayout)
   $('hasGreatStorageRelic').addEventListener('change', renderMatrix)
 
   loadCatalog()
