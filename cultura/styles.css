@@ -22,6 +22,12 @@ body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:'S
 .config-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .cfg-item{display:flex;flex-direction:column;gap:4px}
 .cfg-btn{align-self:flex-end}
+.loading-panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px}
+.loading-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.loading-label{font-size:12px;font-weight:800;color:var(--muted)}
+.loading-pct{font-size:12px;font-weight:900;color:var(--text)}
+.loading-bar{height:10px;border-radius:999px;background:var(--blue-light);border:1px solid var(--blue-border);overflow:hidden}
+.loading-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--blue2));transition:width .18s ease}
 .tool-label{font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
 .tool-check{display:flex;align-items:center;gap:8px;min-height:38px}
 .tool-check input{margin:0}

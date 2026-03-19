@@ -10,6 +10,7 @@ let PC_BUILDINGS = []
 /* ── Matriz de aldea actual ── */
 let villageMatrix = []   // [{buildingName, currentLevel}]
 let matrixCounter = 0
+let isCalculating = false
 
 const RESOURCE_LAYOUTS = {
   '3-4-5-6': { 'LEÑADOR': 3, 'LADRILLAR': 4, 'MINA DE HIERRO': 5, 'GRANJA': 6 },
@@ -64,6 +65,22 @@ const EXTRA_PREREQUISITES = {
 const n0 = v => { const x=Number(v); return isFinite(x)?x:0 }
 const fmtNum = n => n.toLocaleString('es-PE')
 const fmtBuildingName = name => String(name || '').toUpperCase()
+const yieldUi = () => new Promise(resolve => setTimeout(resolve, 0))
+
+function setLoadingProgress(pct){
+  const clamped = Math.max(0, Math.min(100, Math.floor(pct)))
+  const fill = $('loadingFill')
+  const text = $('loadingText')
+  if(fill) fill.style.width = `${clamped}%`
+  if(text) text.textContent = `${clamped}%`
+}
+
+function setLoadingState(active){
+  const panel = $('calcLoading')
+  if(panel) panel.style.display = active ? 'block' : 'none'
+  const btn = $('btnCalc')
+  if(btn) btn.disabled = active
+}
 
 function currentRace(){
   return $('raceSelect')?.value || 'HUNOS'
@@ -493,7 +510,7 @@ function pickBeamCandidates(levels, candidates, ratioKeep, unlockKeep){
   return selected
 }
 
-function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
+async function runGreedyPlan(startLevels, currentTotalPC, pcTarget, onProgress){
   const steps = []
   const runningLevels = new Map(startLevels)
   let accumulatedPCTotal = currentTotalPC
@@ -504,6 +521,10 @@ function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
   let safety = 0
 
   while(accumulatedPCTotal < pcTarget && safety++ < MAX_STEPS){
+    if(onProgress && safety % 5 === 0){
+      onProgress((safety / MAX_STEPS) * 100)
+      await yieldUi()
+    }
     const candidates = generateCandidates(runningLevels)
     if(candidates.length === 0) break
 
@@ -537,10 +558,10 @@ function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
   }
 }
 
-function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
-  const BEAM_WIDTH = 80
-  const EXPAND_PER_STATE = 20
-  const UNLOCK_CANDIDATES = 8
+async function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget, onProgress){
+  const BEAM_WIDTH = 50
+  const EXPAND_PER_STATE = 12
+  const UNLOCK_CANDIDATES = 6
   const MAX_STEPS = 220
   const EXTRA_DEPTH_AFTER_FIRST = 12
   const ratioHint = getGlobalMinRatio(startLevels)
@@ -563,6 +584,10 @@ function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
   }
 
   for(let depth = 0; depth < MAX_STEPS; depth++){
+    if(onProgress && depth % 4 === 0){
+      onProgress((depth / MAX_STEPS) * 100)
+      await yieldUi()
+    }
     const expanded = []
     for(const state of frontier){
       if(state.totalPC >= pcTarget){
@@ -646,47 +671,64 @@ function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
   }
 
   // Fallback seguro si no se logra meta en beam.
-  return runGreedyPlan(startLevels, currentTotalPC, pcTarget)
+  return runGreedyPlan(startLevels, currentTotalPC, pcTarget, onProgress)
 }
 
-function calculate(){
+async function calculate(){
+  if(isCalculating) return
+  isCalculating = true
+  setLoadingProgress(0)
+  setLoadingState(true)
+
   const pcTarget = Math.max(1, n0($('pcTarget').value))
   $('targetLabel').textContent = fmtNum(pcTarget)
 
-  const currentLevels = buildInitialLevelsMap()
-  const current = calcCurrentState()
-  showCurrentSummary(current)
+  try{
+    const currentLevels = buildInitialLevelsMap()
+    const current = calcCurrentState()
+    showCurrentSummary(current)
 
-  if(current.totalPC >= pcTarget){
-    $('resultPanel').style.display = 'none'
+    if(current.totalPC >= pcTarget){
+      $('resultPanel').style.display = 'none'
+      $('emptyState').style.display  = 'none'
+      showFutureSummary(current, pcTarget, true)
+      return
+    }
+
+    const mode = currentOptimizeMode()
+    const hint = $('resultHint')
+    if(hint){
+      hint.textContent = mode === 'greedy'
+        ? 'Ordenado por mejor ratio costo/PC inmediato'
+        : 'Optimizacion global por beam search (costo total)'
+    }
+
+    const progressBase = mode === 'greedy' ? 10 : 5
+    const progressSpan = mode === 'greedy' ? 85 : 90
+    const onProgress = pct => setLoadingProgress(progressBase + (pct * progressSpan / 100))
+
+    const result = mode === 'greedy'
+      ? await runGreedyPlan(currentLevels, current.totalPC, pcTarget, onProgress)
+      : await runGlobalBeamPlan(currentLevels, current.totalPC, pcTarget, onProgress)
+
+    const future = {
+      totalPC: result.totalPC,
+      totalConsumption: current.totalConsumption + result.extraConsume,
+      totalCost: current.totalCost + result.extraCost,
+      extraCost: result.extraCost,
+      extraConsume: result.extraConsume,
+    }
+
+    showFutureSummary(future, pcTarget, false)
+    renderResultTable(result.steps)
+    $('resultPanel').style.display = 'block'
     $('emptyState').style.display  = 'none'
-    showFutureSummary(current, pcTarget, true)
-    return
+    setLoadingProgress(100)
+    await yieldUi()
+  } finally {
+    setLoadingState(false)
+    isCalculating = false
   }
-
-  const mode = currentOptimizeMode()
-  const hint = $('resultHint')
-  if(hint){
-    hint.textContent = mode === 'greedy'
-      ? 'Ordenado por mejor ratio costo/PC inmediato'
-      : 'Optimizacion global por beam search (costo total)'
-  }
-  const result = mode === 'greedy'
-    ? runGreedyPlan(currentLevels, current.totalPC, pcTarget)
-    : runGlobalBeamPlan(currentLevels, current.totalPC, pcTarget)
-
-  const future = {
-    totalPC: result.totalPC,
-    totalConsumption: current.totalConsumption + result.extraConsume,
-    totalCost: current.totalCost + result.extraCost,
-    extraCost: result.extraCost,
-    extraConsume: result.extraConsume,
-  }
-
-  showFutureSummary(future, pcTarget, false)
-  renderResultTable(result.steps)
-  $('resultPanel').style.display = 'block'
-  $('emptyState').style.display  = 'none'
 }
 
 /* ══════════════════════════════════════════════════════════════════
