@@ -49,6 +49,10 @@ function hasGreatStorageRelic(){
   return Boolean($('hasGreatStorageRelic')?.checked)
 }
 
+function currentOptimizeMode(){
+  return $('optimizeMode')?.value || 'global'
+}
+
 function buildingAllowedForContext(building){
   const races = Array.isArray(building.raza) ? building.raza : []
   const raceOk = races.length === 0 || races.includes(currentRace())
@@ -341,33 +345,26 @@ function generateCandidates(currentLevels){
 /* ══════════════════════════════════════════════════════════════════
    CÁLCULO PRINCIPAL — greedy por ratio
    ══════════════════════════════════════════════════════════════════ */
-function calculate(){
-  const pcTarget = Math.max(1, n0($('pcTarget').value))
-  $('targetLabel').textContent = fmtNum(pcTarget)
-
-  // Estado inicial de la aldea
-  const currentLevels = new Map()
+function buildInitialLevelsMap(){
+  const levels = new Map()
   for(const row of villageMatrix){
-    if(row.buildingName && row.currentLevel > 0)
-      currentLevels.set(row.buildingName, row.currentLevel)
+    if(row.buildingName && row.currentLevel > 0){
+      levels.set(row.buildingName, row.currentLevel)
+    }
   }
+  return levels
+}
 
-  // Calcular estado actual
-  const current = calcCurrentState()
-  showCurrentSummary(current)
+function getGlobalMinRatio(seedLevels){
+  const candidates = generateCandidates(seedLevels)
+  if(!candidates.length) return 1_000_000
+  return Math.max(1, candidates[0].ratio)
+}
 
-  if(current.totalPC >= pcTarget){
-    // Ya tenemos suficientes PC
-    $('resultPanel').style.display = 'none'
-    $('emptyState').style.display  = 'none'
-    showFutureSummary(current, pcTarget, true)
-    return
-  }
-
-  // Greedy: en cada paso tomar el candidato con mejor ratio
+function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
   const steps = []
-  let runningLevels = new Map(currentLevels)
-  let accumulatedPCTotal = current.totalPC
+  const runningLevels = new Map(startLevels)
+  let accumulatedPCTotal = currentTotalPC
   let accumulatedCostTotal = 0
   let accumulatedConsumeTotal = 0
 
@@ -379,6 +376,7 @@ function calculate(){
     if(candidates.length === 0) break
 
     const best = candidates[0]
+    const nextPC = accumulatedPCTotal + best.pcGained
 
     steps.push({
       stepNum:   steps.length + 1,
@@ -390,26 +388,157 @@ function calculate(){
       costStep:     best.costStep,
       consumStep:   best.consumStep,
       ratio:        best.ratio,
-      pcAccum:      accumulatedPCTotal + best.pcGained,
+      pcAccum:      nextPC,
     })
 
-    accumulatedPCTotal     += best.pcGained
-    accumulatedCostTotal   += best.costStep
-    accumulatedConsumeTotal+= best.consumStep
+    accumulatedPCTotal = nextPC
+    accumulatedCostTotal += best.costStep
+    accumulatedConsumeTotal += best.consumStep
     runningLevels.set(best.buildingName, best.toLevel)
   }
 
-  // Mostrar resultados
+  return {
+    steps,
+    totalPC: accumulatedPCTotal,
+    extraCost: accumulatedCostTotal,
+    extraConsume: accumulatedConsumeTotal,
+  }
+}
+
+function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
+  const BEAM_WIDTH = 30
+  const EXPAND_PER_STATE = 8
+  const MAX_STEPS = 160
+  const ratioHint = getGlobalMinRatio(startLevels)
+
+  const seed = {
+    levels: new Map(startLevels),
+    totalPC: currentTotalPC,
+    extraCost: 0,
+    extraConsume: 0,
+    steps: [],
+  }
+
+  let frontier = [seed]
+  let bestSolution = null
+
+  const scoreState = state => {
+    const deficit = Math.max(0, pcTarget - state.totalPC)
+    return state.extraCost + deficit * ratioHint
+  }
+
+  for(let depth = 0; depth < MAX_STEPS; depth++){
+    const expanded = []
+    for(const state of frontier){
+      if(state.totalPC >= pcTarget){
+        if(!bestSolution || state.extraCost < bestSolution.extraCost){
+          bestSolution = state
+        }
+        continue
+      }
+
+      const candidates = generateCandidates(state.levels)
+      if(!candidates.length) continue
+
+      for(const c of candidates.slice(0, EXPAND_PER_STATE)){
+        const nextLevels = new Map(state.levels)
+        nextLevels.set(c.buildingName, c.toLevel)
+        const nextPC = state.totalPC + c.pcGained
+
+        expanded.push({
+          levels: nextLevels,
+          totalPC: nextPC,
+          extraCost: state.extraCost + c.costStep,
+          extraConsume: state.extraConsume + c.consumStep,
+          steps: [
+            ...state.steps,
+            {
+              stepNum: state.steps.length + 1,
+              buildingName: c.buildingName,
+              quantity: c.quantity,
+              fromLevel: c.fromLevel,
+              toLevel: c.toLevel,
+              pcGained: c.pcGained,
+              costStep: c.costStep,
+              consumStep: c.consumStep,
+              ratio: c.ratio,
+              pcAccum: nextPC,
+            }
+          ],
+        })
+      }
+    }
+
+    if(!expanded.length) break
+
+    expanded.sort((a, b) => {
+      const sa = scoreState(a)
+      const sb = scoreState(b)
+      if(sa !== sb) return sa - sb
+      if(a.extraCost !== b.extraCost) return a.extraCost - b.extraCost
+      return b.totalPC - a.totalPC
+    })
+    frontier = expanded.slice(0, BEAM_WIDTH)
+
+    const reached = frontier.filter(s => s.totalPC >= pcTarget)
+    if(reached.length){
+      reached.sort((a, b) => a.extraCost - b.extraCost)
+      if(!bestSolution || reached[0].extraCost < bestSolution.extraCost){
+        bestSolution = reached[0]
+      }
+      break
+    }
+  }
+
+  if(bestSolution){
+    return {
+      steps: bestSolution.steps,
+      totalPC: bestSolution.totalPC,
+      extraCost: bestSolution.extraCost,
+      extraConsume: bestSolution.extraConsume,
+    }
+  }
+
+  // Fallback seguro si no se logra meta en beam.
+  return runGreedyPlan(startLevels, currentTotalPC, pcTarget)
+}
+
+function calculate(){
+  const pcTarget = Math.max(1, n0($('pcTarget').value))
+  $('targetLabel').textContent = fmtNum(pcTarget)
+
+  const currentLevels = buildInitialLevelsMap()
+  const current = calcCurrentState()
+  showCurrentSummary(current)
+
+  if(current.totalPC >= pcTarget){
+    $('resultPanel').style.display = 'none'
+    $('emptyState').style.display  = 'none'
+    showFutureSummary(current, pcTarget, true)
+    return
+  }
+
+  const mode = currentOptimizeMode()
+  const hint = $('resultHint')
+  if(hint){
+    hint.textContent = mode === 'greedy'
+      ? 'Ordenado por mejor ratio costo/PC inmediato'
+      : 'Optimizacion global por beam search (costo total)'
+  }
+  const result = mode === 'greedy'
+    ? runGreedyPlan(currentLevels, current.totalPC, pcTarget)
+    : runGlobalBeamPlan(currentLevels, current.totalPC, pcTarget)
+
   const future = {
-    totalPC:          accumulatedPCTotal,
-    totalConsumption: current.totalConsumption + accumulatedConsumeTotal,
-    totalCost:        current.totalCost + accumulatedCostTotal,
-    extraCost:        accumulatedCostTotal,
-    extraConsume:     accumulatedConsumeTotal,
+    totalPC: result.totalPC,
+    totalConsumption: current.totalConsumption + result.extraConsume,
+    totalCost: current.totalCost + result.extraCost,
+    extraCost: result.extraCost,
+    extraConsume: result.extraConsume,
   }
 
   showFutureSummary(future, pcTarget, false)
-  renderResultTable(steps)
+  renderResultTable(result.steps)
   $('resultPanel').style.display = 'block'
   $('emptyState').style.display  = 'none'
 }

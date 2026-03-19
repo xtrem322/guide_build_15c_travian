@@ -62,6 +62,13 @@
         <div class="tool-label">Tope de PC a alcanzar</div>
         <input id="pcTarget" type="number" min="1" value="500">
       </div>
+      <div class="cfg-item">
+        <div class="tool-label">Estrategia</div>
+        <select id="optimizeMode">
+          <option value="global" selected>GLOBAL (BEAM)</option>
+          <option value="greedy">GREEDY</option>
+        </select>
+      </div>
       <div class="cfg-item cfg-btn">
         <button class="btn btn-blue" id="btnCalc" type="button">&#9889; Calcular</button>
       </div>
@@ -97,7 +104,7 @@
   <div id="resultPanel" style="display:none">
     <div class="section-title" style="margin-top:20px">
       <span>&#128200; Plan optimo para alcanzar <span id="targetLabel">500</span> PC</span>
-      <span class="section-hint">Ordenado por mejor ratio Costo / PC &middot; Incluye costos de niveles previos sin PC</span>
+      <span class="section-hint" id="resultHint">Plan segun estrategia seleccionada &middot; Incluye costos de niveles previos sin PC</span>
     </div>
 
     <div class="summary-box summary-future" id="futureSummary">
