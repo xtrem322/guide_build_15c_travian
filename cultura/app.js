@@ -361,6 +361,49 @@ function getGlobalMinRatio(seedLevels){
   return Math.max(1, candidates[0].ratio)
 }
 
+function countBuildableAtZero(levels){
+  let count = 0
+  for(const b of PC_BUILDINGS){
+    if((levels.get(b.nombre) || 0) > 0) continue
+    if(buildRequirementsMet(b, levels)) count++
+  }
+  return count
+}
+
+function unlockGainForCandidate(levels, candidate){
+  const before = countBuildableAtZero(levels)
+  const nextLevels = new Map(levels)
+  nextLevels.set(candidate.buildingName, candidate.toLevel)
+  const after = countBuildableAtZero(nextLevels)
+  return Math.max(0, after - before)
+}
+
+function pickBeamCandidates(levels, candidates, ratioKeep, unlockKeep){
+  const selected = []
+  const seen = new Set()
+
+  const add = c => {
+    const key = `${c.buildingName}:${c.toLevel}`
+    if(seen.has(key)) return
+    seen.add(key)
+    selected.push(c)
+  }
+
+  candidates.slice(0, ratioKeep).forEach(add)
+
+  const unlockers = candidates
+    .map(c => ({ c, unlockGain: unlockGainForCandidate(levels, c) }))
+    .filter(x => x.unlockGain > 0)
+    .sort((a, b) => {
+      if(a.unlockGain !== b.unlockGain) return b.unlockGain - a.unlockGain
+      return a.c.ratio - b.c.ratio
+    })
+    .slice(0, unlockKeep)
+
+  unlockers.forEach(x => add(x.c))
+  return selected
+}
+
 function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
   const steps = []
   const runningLevels = new Map(startLevels)
@@ -406,9 +449,11 @@ function runGreedyPlan(startLevels, currentTotalPC, pcTarget){
 }
 
 function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
-  const BEAM_WIDTH = 30
-  const EXPAND_PER_STATE = 8
-  const MAX_STEPS = 160
+  const BEAM_WIDTH = 80
+  const EXPAND_PER_STATE = 20
+  const UNLOCK_CANDIDATES = 8
+  const MAX_STEPS = 220
+  const EXTRA_DEPTH_AFTER_FIRST = 12
   const ratioHint = getGlobalMinRatio(startLevels)
 
   const seed = {
@@ -421,6 +466,7 @@ function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
 
   let frontier = [seed]
   let bestSolution = null
+  let firstSolutionDepth = -1
 
   const scoreState = state => {
     const deficit = Math.max(0, pcTarget - state.totalPC)
@@ -440,7 +486,14 @@ function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
       const candidates = generateCandidates(state.levels)
       if(!candidates.length) continue
 
-      for(const c of candidates.slice(0, EXPAND_PER_STATE)){
+      const candidatesToExpand = pickBeamCandidates(
+        state.levels,
+        candidates,
+        EXPAND_PER_STATE,
+        UNLOCK_CANDIDATES
+      )
+
+      for(const c of candidatesToExpand){
         const nextLevels = new Map(state.levels)
         nextLevels.set(c.buildingName, c.toLevel)
         const nextPC = state.totalPC + c.pcGained
@@ -486,6 +539,10 @@ function runGlobalBeamPlan(startLevels, currentTotalPC, pcTarget){
       if(!bestSolution || reached[0].extraCost < bestSolution.extraCost){
         bestSolution = reached[0]
       }
+      if(firstSolutionDepth < 0) firstSolutionDepth = depth
+    }
+
+    if(firstSolutionDepth >= 0 && depth - firstSolutionDepth >= EXTRA_DEPTH_AFTER_FIRST){
       break
     }
   }
