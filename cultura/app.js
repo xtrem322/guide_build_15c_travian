@@ -27,6 +27,38 @@ const RESOURCE_LAYOUTS = {
 }
 
 const RESOURCE_BUILDINGS = ['LEÑADOR', 'LADRILLAR', 'MINA DE HIERRO', 'GRANJA']
+const CIVIC_BUILDINGS = ['RESIDENCIA', 'PALACIO', 'CENTRO DE MANDO']
+const MAX_NON_RESOURCE_SLOTS = 20
+const MEETING_SQUARE_NAME = 'PLAZA REUNIONES'
+const HIDING_PLACE_NAME = 'ESCONDITE'
+const EXTRA_PREREQUISITES = {
+  'MOLINO': [{ nombre: 'GRANJA', nivel: 5 }],
+  'PANADERIA': [
+    { nombre: 'MOLINO', nivel: 5 },
+    { nombre: 'GRANJA', nivel: 10 },
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 5 },
+  ],
+  'SERRERIA': [
+    { nombre: 'LEÑADOR', nivel: 10 },
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 5 },
+  ],
+  'FUNDICION DE HIERRO': [
+    { nombre: 'MINA DE HIERRO', nivel: 10 },
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 5 },
+  ],
+  'LADRILLAR': [
+    { nombre: 'BARRERA', nivel: 10 },
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 5 },
+  ],
+  'AYUNTAMIENTO': [
+    { nombre: 'ACADEMIA', nivel: 10 },
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 10 },
+  ],
+  'HOSPITAL': [
+    { nombre: 'EDIFICIO PRINCIPAL', nivel: 10 },
+    { nombre: 'ACADEMIA', nivel: 15 },
+  ],
+}
 
 /* ── Helpers ── */
 const n0 = v => { const x=Number(v); return isFinite(x)?x:0 }
@@ -53,6 +85,43 @@ function currentOptimizeMode(){
   return $('optimizeMode')?.value || 'global'
 }
 
+function currentCivicChoice(){
+  return $('civicChoice')?.value || 'AUTO'
+}
+
+function civicRuleAllowsCandidate(buildingName, levels){
+  if(!CIVIC_BUILDINGS.includes(buildingName)) return true
+
+  const choice = currentCivicChoice()
+  if(choice === 'NINGUNO') return false
+  if(CIVIC_BUILDINGS.includes(choice)) return buildingName === choice
+
+  const active = CIVIC_BUILDINGS.filter(name => (levels.get(name) || 0) > 0)
+  if(active.length === 0) return true
+  return active.includes(buildingName)
+}
+
+function countNonResourceSlotsUsed(levels){
+  let used = 0
+  for(const [name, level] of levels.entries()){
+    if(level <= 0) continue
+    if(RESOURCE_BUILDINGS.includes(name)) continue
+    if(name === MEETING_SQUARE_NAME) continue
+    used++
+  }
+  return used
+}
+
+function slotRuleAllowsCandidate(buildingName, levels){
+  const currentLevel = levels.get(buildingName) || 0
+  if(currentLevel > 0) return true
+  if(RESOURCE_BUILDINGS.includes(buildingName)) return true
+  if(buildingName === MEETING_SQUARE_NAME){
+    return (levels.get(MEETING_SQUARE_NAME) || 0) <= 0
+  }
+  return countNonResourceSlotsUsed(levels) < MAX_NON_RESOURCE_SLOTS
+}
+
 function buildingAllowedForContext(building){
   const races = Array.isArray(building.raza) ? building.raza : []
   const raceOk = races.length === 0 || races.includes(currentRace())
@@ -76,6 +145,13 @@ function refreshAllowedBuildings(){
 }
 
 function buildRequirementsMet(building, currentLevels){
+  if(!civicRuleAllowsCandidate(building.nombre, currentLevels)){
+    return false
+  }
+  if(!slotRuleAllowsCandidate(building.nombre, currentLevels)){
+    return false
+  }
+
   const currentLevel = currentLevels.get(building.nombre) || 0
   if(currentLevel > 0) return true
 
@@ -83,7 +159,10 @@ function buildRequirementsMet(building, currentLevels){
     return false
   }
 
-  const prereqs = Array.isArray(building.prerequisitos) ? building.prerequisitos : []
+  const prereqs = [
+    ...(Array.isArray(building.prerequisitos) ? building.prerequisitos : []),
+    ...(EXTRA_PREREQUISITES[building.nombre] || []),
+  ]
   return prereqs.every(req => (currentLevels.get(req.nombre) || 0) >= Number(req.nivel || 0))
 }
 
@@ -112,6 +191,16 @@ function applyVillageLayout(){
 
   villageMatrix = [...resourceRows, ...nonResourceRows]
   renderMatrix()
+}
+
+function normalizeRowQuantity(row){
+  const raw = Math.max(1, Math.floor(n0(row.quantity || 1)))
+  if(!row.buildingName) return raw
+  if(RESOURCE_BUILDINGS.includes(row.buildingName)) return raw
+  if(row.buildingName === HIDING_PLACE_NAME){
+    return (row.currentLevel || 0) >= 10 ? raw : 1
+  }
+  return 1
 }
 
 function setTheme(){
@@ -668,7 +757,7 @@ function renderMatrix(){
 
   let changed = false
   villageMatrix.forEach(row => {
-    row.quantity = Math.max(1, Math.floor(n0(row.quantity || 1)))
+    row.quantity = normalizeRowQuantity(row)
     if(row.buildingName){
       const b = CATALOG.find(x => x.nombre === row.buildingName)
       if(!b || !buildingAllowedForContext(b)){
@@ -708,15 +797,21 @@ function renderMatrixRow(row, idx){
   sel.addEventListener('change', () => {
     row.buildingName = sel.value
     row.currentLevel = 0
+    row.quantity = normalizeRowQuantity(row)
     updateMatrixRowCalc(row)
+    qtyInp.value = String(row.quantity)
+    const allowQty = RESOURCE_BUILDINGS.includes(row.buildingName) || (row.buildingName === HIDING_PLACE_NAME && row.currentLevel >= 10)
+    qtyInp.disabled = !allowQty
   })
   selD.appendChild(sel); div.appendChild(selD)
 
   /* Cantidad */
   const qtyD = document.createElement('div'); qtyD.className = 'mc'
-  const qtyInp = document.createElement('input'); qtyInp.type = 'number'; qtyInp.min = '1'; qtyInp.value = String(Math.max(1, Math.floor(n0(row.quantity || 1))))
+  const qtyInp = document.createElement('input'); qtyInp.type = 'number'; qtyInp.min = '1'; qtyInp.value = String(normalizeRowQuantity(row))
+  const allowQty = RESOURCE_BUILDINGS.includes(row.buildingName) || (row.buildingName === HIDING_PLACE_NAME && row.currentLevel >= 10)
+  qtyInp.disabled = !allowQty
   qtyInp.addEventListener('input', () => {
-    row.quantity = Math.max(1, Math.floor(n0(qtyInp.value || 1)))
+    row.quantity = normalizeRowQuantity({ ...row, quantity: qtyInp.value })
     qtyInp.value = String(row.quantity)
     updateMatrixRowCalc(row)
   })
@@ -727,6 +822,10 @@ function renderMatrixRow(row, idx){
   const lvlInp = document.createElement('input'); lvlInp.type = 'number'; lvlInp.min = '0'; lvlInp.value = String(row.currentLevel || 0)
   lvlInp.addEventListener('input', () => {
     row.currentLevel = Math.max(0, Math.floor(n0(lvlInp.value)))
+    row.quantity = normalizeRowQuantity(row)
+    qtyInp.value = String(row.quantity)
+    const qtyOpen = RESOURCE_BUILDINGS.includes(row.buildingName) || (row.buildingName === HIDING_PLACE_NAME && row.currentLevel >= 10)
+    qtyInp.disabled = !qtyOpen
     updateMatrixRowCalc(row)
   })
   lvlD.appendChild(lvlInp); div.appendChild(lvlD)
@@ -798,6 +897,7 @@ function init(){
   })
   $('villageLayout')?.addEventListener('change', applyVillageLayout)
   $('hasGreatStorageRelic').addEventListener('change', renderMatrix)
+  $('civicChoice')?.addEventListener('change', renderMatrix)
 
   loadCatalog()
 }
