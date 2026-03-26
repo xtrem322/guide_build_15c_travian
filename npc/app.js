@@ -16,7 +16,7 @@ let CATALOG_BUILD = null
 let CATALOG_TROOPS = null
 
 let rowsState = []
-let lastCopyPayload = ""
+let lastCopyValues = { wood:"", clay:"", iron:"", crop:"" }
 
 function showInitError(message){
   const status = $("statusLine")
@@ -293,24 +293,34 @@ function setText(id, v){
   $(id).textContent = fmtInt(v)
 }
 
-function updateCopyButton(payload){
-  const btn = $("copyNpcText")
-  if(!btn) return
-  const hasData = Boolean(payload)
-  btn.hidden = !hasData
-  btn.disabled = !hasData
-  lastCopyPayload = hasData ? payload : ""
+function updateCopyButtons(values){
+  const wrap = $("copyNpcActions")
+  if(!wrap) return
+
+  const nextValues = values || { wood:"", clay:"", iron:"", crop:"" }
+  const hasData = Object.values(nextValues).some(Boolean)
+  wrap.hidden = !hasData
+  lastCopyValues = { ...nextValues }
+
+  const keys = ["wood","clay","iron","crop"]
+  for(const key of keys){
+    const btn = document.querySelector(`[data-copy-key="${key}"]`)
+    if(!btn) continue
+    btn.disabled = !nextValues[key]
+  }
 }
 
-async function copyNpcText(){
-  if(!lastCopyPayload) return
+async function copyNpcValue(ev){
+  const key = ev?.currentTarget?.dataset?.copyKey
+  const value = key ? lastCopyValues[key] : ""
+  if(!value) return
   const status = $("statusLine")
   try{
-    await navigator.clipboard.writeText(lastCopyPayload)
+    await navigator.clipboard.writeText(value)
     status.className = "statusline status-ok"
-    status.textContent = "Texto copiado para pegar en el mercado."
+    status.textContent = `Valor copiado: ${fmtInt(value)}`
   }catch(err){
-    console.error("[NPC] No se pudo copiar el texto", err)
+    console.error("[NPC] No se pudo copiar el valor", err)
     status.className = "statusline status-bad"
     status.textContent = "No se pudo copiar. Verifica permisos del portapapeles."
   }
@@ -479,7 +489,7 @@ function recalc(){
     setText("tgtIron", sum.iron)
     setText("tgtCrop", sum.crop)
     setText("tgtAll",  sum.total)
-    updateCopyButton("")
+    updateCopyButtons()
     return
   }
 
@@ -532,14 +542,14 @@ function recalc(){
   setText("tgtCrop", sum.crop + dist.crop)
   setText("tgtAll",  sum.total + dist.total)
 
-  const copyValues = [
-    sum.wood + dist.wood,
-    sum.clay + dist.clay,
-    sum.iron + dist.iron,
-    sum.crop + dist.crop
-  ]
-  const hasCopyData = copyValues.some(v => Math.floor(n0(v)) > 0)
-  updateCopyButton(hasCopyData ? copyValues.map(fmtInt).join("\t") : "")
+  const copyValues = {
+    wood: fmtInt(sum.wood + dist.wood),
+    clay: fmtInt(sum.clay + dist.clay),
+    iron: fmtInt(sum.iron + dist.iron),
+    crop: fmtInt(sum.crop + dist.crop)
+  }
+  const hasCopyData = Object.values(copyValues).some(v => Math.floor(n0(v)) > 0)
+  updateCopyButtons(hasCopyData ? copyValues : undefined)
 }
 
 function makeCell(text){
@@ -781,7 +791,10 @@ async function init(){
   $("excessMode").addEventListener("change", recalc)
   $("eqOrder").addEventListener("change",    recalc)
   $("curTotal").addEventListener("input",    recalc)
-  $("copyNpcText").addEventListener("click", copyNpcText)
+  $("copyWood").addEventListener("click", copyNpcValue)
+  $("copyClay").addEventListener("click", copyNpcValue)
+  $("copyIron").addEventListener("click", copyNpcValue)
+  $("copyCrop").addEventListener("click", copyNpcValue)
 
   $("addRow").addEventListener("click", addRowDefault)
 
