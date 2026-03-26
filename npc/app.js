@@ -17,12 +17,6 @@ let CATALOG_TROOPS = null
 
 let rowsState = []
 let lastCopyValues = { wood:"", clay:"", iron:"", crop:"" }
-const RESOURCE_META = {
-  wood: { label:"Madera", icon:"./icons/wood.svg" },
-  clay: { label:"Barro", icon:"./icons/clay.svg" },
-  iron: { label:"Hierro", icon:"./icons/iron.svg" },
-  crop: { label:"Cereal", icon:"./icons/crop.svg" }
-}
 
 function showInitError(message){
   const status = $("statusLine")
@@ -299,12 +293,6 @@ function setText(id, v){
   $(id).textContent = fmtInt(v)
 }
 
-function resourceLabelMarkup(key){
-  const meta = RESOURCE_META[key]
-  if(!meta) return ""
-  return `<span class="res-label"><img class="res-icon" src="${meta.icon}" alt=""><span>${meta.label}</span></span>`
-}
-
 function updateCopyButtons(values){
   const nextValues = values || { wood:"", clay:"", iron:"", crop:"" }
   const hasData = Object.values(nextValues).some(Boolean)
@@ -355,20 +343,11 @@ function renderTimeTroopMatrix(detail, leftover){
   const grid = document.createElement("div")
   grid.className = "troop-matrix-grid"
 
-  const headers = [
-    { label:"Cola / Tropa", left:true },
-    { label:"Cantidad" },
-    { key:"wood" },
-    { key:"clay" },
-    { key:"iron" },
-    { key:"crop" },
-    { label:"Total" },
-    { label:"Tiempo cola" }
-  ]
+  const headers = ["Cola / Tropa","Cantidad","Madera","Barro","Hierro","Cereal","Total","Tiempo cola"]
   for(const h of headers){
     const cell = document.createElement("div")
-    cell.className = "tm-hdr" + (h.left ? " tm-left" : "")
-    cell.innerHTML = h.key ? resourceLabelMarkup(h.key) : h.label
+    cell.className = "tm-hdr" + (h === "Cola / Tropa" ? " tm-left" : "")
+    cell.textContent = h
     grid.appendChild(cell)
   }
 
@@ -441,20 +420,11 @@ function renderExactTroopMatrix(detail, leftover){
   const grid = document.createElement("div")
   grid.className = "troop-matrix-grid"
 
-  const headers = [
-    { label:"Tropa", left:true },
-    { label:"Cantidad" },
-    { key:"wood" },
-    { key:"clay" },
-    { key:"iron" },
-    { key:"crop" },
-    { label:"Total" },
-    { label:"Tiempo" }
-  ]
+  const headers = ["Tropa","Cantidad","Madera","Barro","Hierro","Cereal","Total","Tiempo"]
   for(const h of headers){
     const cell = document.createElement("div")
-    cell.className = "tm-hdr" + (h.left ? " tm-left" : "")
-    cell.innerHTML = h.key ? resourceLabelMarkup(h.key) : h.label
+    cell.className = "tm-hdr" + (h === "Tropa" ? " tm-left" : "")
+    cell.textContent = h
     grid.appendChild(cell)
   }
 
