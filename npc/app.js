@@ -16,6 +16,7 @@ let CATALOG_BUILD = null
 let CATALOG_TROOPS = null
 
 let rowsState = []
+let lastCopyPayload = ""
 
 function showInitError(message){
   const status = $("statusLine")
@@ -292,6 +293,29 @@ function setText(id, v){
   $(id).textContent = fmtInt(v)
 }
 
+function updateCopyButton(payload){
+  const btn = $("copyNpcText")
+  if(!btn) return
+  const hasData = Boolean(payload)
+  btn.hidden = !hasData
+  btn.disabled = !hasData
+  lastCopyPayload = hasData ? payload : ""
+}
+
+async function copyNpcText(){
+  if(!lastCopyPayload) return
+  const status = $("statusLine")
+  try{
+    await navigator.clipboard.writeText(lastCopyPayload)
+    status.className = "statusline status-ok"
+    status.textContent = "Texto copiado para pegar en el mercado."
+  }catch(err){
+    console.error("[NPC] No se pudo copiar el texto", err)
+    status.className = "statusline status-bad"
+    status.textContent = "No se pudo copiar. Verifica permisos del portapapeles."
+  }
+}
+
 function renderTimeTroopMatrix(detail, leftover){
   const wrap = $("timeTroopMatrix")
   if(!wrap) return
@@ -455,6 +479,7 @@ function recalc(){
     setText("tgtIron", sum.iron)
     setText("tgtCrop", sum.crop)
     setText("tgtAll",  sum.total)
+    updateCopyButton("")
     return
   }
 
@@ -506,6 +531,15 @@ function recalc(){
   setText("tgtIron", sum.iron + dist.iron)
   setText("tgtCrop", sum.crop + dist.crop)
   setText("tgtAll",  sum.total + dist.total)
+
+  const copyValues = [
+    sum.wood + dist.wood,
+    sum.clay + dist.clay,
+    sum.iron + dist.iron,
+    sum.crop + dist.crop
+  ]
+  const hasCopyData = copyValues.some(v => Math.floor(n0(v)) > 0)
+  updateCopyButton(hasCopyData ? copyValues.map(fmtInt).join("\t") : "")
 }
 
 function makeCell(text){
@@ -747,6 +781,7 @@ async function init(){
   $("excessMode").addEventListener("change", recalc)
   $("eqOrder").addEventListener("change",    recalc)
   $("curTotal").addEventListener("input",    recalc)
+  $("copyNpcText").addEventListener("click", copyNpcText)
 
   $("addRow").addEventListener("click", addRowDefault)
 
