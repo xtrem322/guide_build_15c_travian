@@ -68,20 +68,29 @@
       <div class="label-yellow">MATERIAS TOTAL</div>
     </div>
 
-    <div class="total-bar">
-      <div class="hdr-blue left">TOTAL REPARTIR →</div>
+    <div class="copy-bar">
+      <div></div>
       <button class="copy-head copy-wood" id="copyWood" type="button" data-copy-key="wood" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Madera</span></span>
+        <span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Copiar</span></span>
       </button>
       <button class="copy-head copy-clay" id="copyClay" type="button" data-copy-key="clay" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Barro</span></span>
+        <span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Copiar</span></span>
       </button>
       <button class="copy-head copy-iron" id="copyIron" type="button" data-copy-key="iron" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Hierro</span></span>
+        <span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Copiar</span></span>
       </button>
       <button class="copy-head copy-crop" id="copyCrop" type="button" data-copy-key="crop" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Cereal</span></span>
+        <span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Copiar</span></span>
       </button>
+      <div></div>
+    </div>
+
+    <div class="total-bar">
+      <div class="hdr-blue left">TOTAL REPARTIR →</div>
+      <div class="hdr-blue">Madera</div>
+      <div class="hdr-blue">Barro</div>
+      <div class="hdr-blue">Hierro</div>
+      <div class="hdr-blue">Cereal</div>
       <div class="hdr-blue">Total</div>
 
       <div class="cell-yellow left muted">Objetivo post-NPC</div>
@@ -169,7 +178,6 @@
         </div>
       </div>
 
-      <!-- NUEVA MATRIZ: Resumen de tropas entrenables para Opción 2 -->
       <div id="timeTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
     </div>
 
@@ -179,7 +187,6 @@
         <select id="exactTroop"></select>
       </div>
 
-      <!-- NUEVA MATRIZ: Resumen de tropas entrenables para Opción 3 -->
       <div id="exactTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
     </div>
 
