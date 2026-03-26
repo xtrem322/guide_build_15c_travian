@@ -17,6 +17,12 @@ let CATALOG_TROOPS = null
 
 let rowsState = []
 let lastCopyValues = { wood:"", clay:"", iron:"", crop:"" }
+const RESOURCE_META = {
+  wood: { label:"Madera", icon:"./icons/wood.svg" },
+  clay: { label:"Barro", icon:"./icons/clay.svg" },
+  iron: { label:"Hierro", icon:"./icons/iron.svg" },
+  crop: { label:"Cereal", icon:"./icons/crop.svg" }
+}
 
 function showInitError(message){
   const status = $("statusLine")
@@ -293,19 +299,22 @@ function setText(id, v){
   $(id).textContent = fmtInt(v)
 }
 
-function updateCopyButtons(values){
-  const wrap = $("copyNpcActions")
-  if(!wrap) return
+function resourceLabelMarkup(key){
+  const meta = RESOURCE_META[key]
+  if(!meta) return ""
+  return `<span class="res-label"><img class="res-icon" src="${meta.icon}" alt=""><span>${meta.label}</span></span>`
+}
 
+function updateCopyButtons(values){
   const nextValues = values || { wood:"", clay:"", iron:"", crop:"" }
   const hasData = Object.values(nextValues).some(Boolean)
-  wrap.hidden = !hasData
   lastCopyValues = { ...nextValues }
 
   const keys = ["wood","clay","iron","crop"]
   for(const key of keys){
     const btn = document.querySelector(`[data-copy-key="${key}"]`)
     if(!btn) continue
+    btn.hidden = !hasData
     btn.disabled = !nextValues[key]
   }
 }
@@ -346,11 +355,20 @@ function renderTimeTroopMatrix(detail, leftover){
   const grid = document.createElement("div")
   grid.className = "troop-matrix-grid"
 
-  const headers = ["Cola / Tropa","Cantidad","Madera","Barro","Hierro","Cereal","Total","Tiempo cola"]
+  const headers = [
+    { label:"Cola / Tropa", left:true },
+    { label:"Cantidad" },
+    { key:"wood" },
+    { key:"clay" },
+    { key:"iron" },
+    { key:"crop" },
+    { label:"Total" },
+    { label:"Tiempo cola" }
+  ]
   for(const h of headers){
     const cell = document.createElement("div")
-    cell.className = "tm-hdr" + (h === "Cola / Tropa" ? " tm-left" : "")
-    cell.textContent = h
+    cell.className = "tm-hdr" + (h.left ? " tm-left" : "")
+    cell.innerHTML = h.key ? resourceLabelMarkup(h.key) : h.label
     grid.appendChild(cell)
   }
 
@@ -423,11 +441,20 @@ function renderExactTroopMatrix(detail, leftover){
   const grid = document.createElement("div")
   grid.className = "troop-matrix-grid"
 
-  const headers = ["Tropa","Cantidad","Madera","Barro","Hierro","Cereal","Total","Tiempo"]
+  const headers = [
+    { label:"Tropa", left:true },
+    { label:"Cantidad" },
+    { key:"wood" },
+    { key:"clay" },
+    { key:"iron" },
+    { key:"crop" },
+    { label:"Total" },
+    { label:"Tiempo" }
+  ]
   for(const h of headers){
     const cell = document.createElement("div")
-    cell.className = "tm-hdr" + (h === "Tropa" ? " tm-left" : "")
-    cell.textContent = h
+    cell.className = "tm-hdr" + (h.left ? " tm-left" : "")
+    cell.innerHTML = h.key ? resourceLabelMarkup(h.key) : h.label
     grid.appendChild(cell)
   }
 

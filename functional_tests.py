@@ -122,8 +122,7 @@ def test_roi(driver, base_url):
 def test_npc(driver, base_url):
     driver.get(f"{base_url}/npc/")
     wait_for(driver, "#addRow")
-    copy_actions = driver.find_element(By.ID, "copyNpcActions")
-    assert not copy_actions.is_displayed(), "Los botones de copia no deben mostrarse sin datos"
+    assert not driver.find_element(By.ID, "copyWood").is_displayed(), "El boton de madera no debe mostrarse sin datos"
 
     driver.find_element(By.ID, "addRow").click()
     wait_for(driver, "#rows tr")
@@ -132,7 +131,7 @@ def test_npc(driver, base_url):
     cur_total = driver.find_element(By.ID, "curTotal")
     cur_total.clear()
     cur_total.send_keys("100000")
-    WebDriverWait(driver, 5).until(lambda d: d.find_element(By.ID, "copyNpcActions").is_displayed())
+    WebDriverWait(driver, 5).until(lambda d: d.find_element(By.ID, "copyWood").is_displayed())
 
     expected_copy = driver.find_element(By.ID, "tgtWood").text
     driver.execute_script("window.__copiedNpcText = ''; navigator.clipboard.writeText = async (text) => { window.__copiedNpcText = text; };")

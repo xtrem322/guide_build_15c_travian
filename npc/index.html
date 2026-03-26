@@ -66,20 +66,22 @@
 
     <div class="total-header">
       <div class="label-yellow">MATERIAS TOTAL</div>
-      <div class="copy-actions" id="copyNpcActions" hidden>
-        <button class="btn btn-copy" id="copyWood" type="button" data-copy-key="wood">Copiar Madera</button>
-        <button class="btn btn-copy" id="copyClay" type="button" data-copy-key="clay">Copiar Barro</button>
-        <button class="btn btn-copy" id="copyIron" type="button" data-copy-key="iron">Copiar Hierro</button>
-        <button class="btn btn-copy" id="copyCrop" type="button" data-copy-key="crop">Copiar Cereal</button>
-      </div>
     </div>
 
     <div class="total-bar">
       <div class="hdr-blue left">TOTAL REPARTIR →</div>
-      <div class="hdr-blue">Madera</div>
-      <div class="hdr-blue">Barro</div>
-      <div class="hdr-blue">Hierro</div>
-      <div class="hdr-blue">Cereal</div>
+      <button class="copy-head copy-wood" id="copyWood" type="button" data-copy-key="wood" hidden>
+        <span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Madera</span></span>
+      </button>
+      <button class="copy-head copy-clay" id="copyClay" type="button" data-copy-key="clay" hidden>
+        <span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Barro</span></span>
+      </button>
+      <button class="copy-head copy-iron" id="copyIron" type="button" data-copy-key="iron" hidden>
+        <span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Hierro</span></span>
+      </button>
+      <button class="copy-head copy-crop" id="copyCrop" type="button" data-copy-key="crop" hidden>
+        <span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Cereal</span></span>
+      </button>
       <div class="hdr-blue">Total</div>
 
       <div class="cell-yellow left muted">Objetivo post-NPC</div>
@@ -187,10 +189,10 @@
     <div class="subtotal-title">SUBTOTAL (PLAN)</div>
     <div class="subtotal-bar">
       <div class="hdr-blue left">Subtotal →</div>
-      <div class="hdr-blue">Madera</div>
-      <div class="hdr-blue">Barro</div>
-      <div class="hdr-blue">Hierro</div>
-      <div class="hdr-blue">Cereal</div>
+      <div class="hdr-blue"><span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Madera</span></span></div>
+      <div class="hdr-blue"><span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Barro</span></span></div>
+      <div class="hdr-blue"><span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Hierro</span></span></div>
+      <div class="hdr-blue"><span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Cereal</span></span></div>
       <div class="hdr-blue">Total</div>
 
       <div class="cell-white left muted">Requerido</div>
@@ -210,10 +212,10 @@
         <th>Cant</th>
         <th>Inicial</th>
         <th>Final</th>
-        <th>Madera</th>
-        <th>Barro</th>
-        <th>Hierro</th>
-        <th>Cereal</th>
+        <th><span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Madera</span></span></th>
+        <th><span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Barro</span></span></th>
+        <th><span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Hierro</span></span></th>
+        <th><span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Cereal</span></span></th>
         <th>Total</th>
         <th></th>
       </tr>
