@@ -304,6 +304,26 @@ def test_npc_training_capacity_parser(driver, base_url):
     assert by_name["Villa Tormento"]["granaryCap"] == 880000, "Villa Tormento no parseo granero"
 
 
+def test_npc_training_capacity_import_without_resources(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];",
+        CAPACITY_EXAMPLE
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 9
+    )
+
+    status = driver.find_element(By.ID, "trainingImportStatus").text
+    page_status = driver.find_element(By.ID, "statusLine").text
+    assert "Aldeas reconocidas: 9" in status, "NPC entrenamiento no reconocio las 9 aldeas al importar solo capacidad"
+    assert "Falta pegar Los Recursos para 9" in page_status, "NPC entrenamiento no aviso que faltan recursos tras importar capacidad"
+
+
 def main():
     try:
         driver = build_driver()
@@ -322,6 +342,7 @@ def main():
                 ("roi", test_roi),
                 ("npc", test_npc),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
+                ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

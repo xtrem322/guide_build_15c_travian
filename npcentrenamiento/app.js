@@ -293,7 +293,8 @@ function defaultTrainingVillage(data, previous){
     key: data.key,
     warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
-    current: withResourceTotal(data.current)
+    current: withResourceTotal(data.current),
+    hasResources: Boolean(data.hasResources)
   }
 }
 
@@ -319,8 +320,11 @@ function importTrainingVillages(){
 
   for(const cap of capacityRows){
     const res = resourceMap.get(cap.key)
-    if(!res) continue
-    merged.push(defaultTrainingVillage({ ...cap, current: res.current }, prevByKey.get(cap.key)))
+    merged.push(defaultTrainingVillage({
+      ...cap,
+      current: res ? res.current : zeroResources(),
+      hasResources: Boolean(res)
+    }, prevByKey.get(cap.key)))
   }
 
   merged.sort((a, b) => a.name.localeCompare(b.name, "es"))
@@ -334,7 +338,9 @@ function importTrainingVillages(){
   return {
     capacityCount: capacityRows.length,
     resourceCount: resourceRows.length,
-    mergedCount: merged.length
+    mergedCount: merged.length,
+    matchedCount: merged.filter(v => v.hasResources).length,
+    missingResourceCount: merged.filter(v => !v.hasResources).length
   }
 }
 
@@ -782,6 +788,14 @@ function recalc(){
     return
   }
 
+  const missingResources = trainingVillages.filter(v => !v.hasResources)
+  if(missingResources.length){
+    renderTrainingSummary(null)
+    renderTrainingResult(null)
+    showStatus(`Capacidad importada para ${fmtInt(trainingVillages.length)} aldeas. Falta pegar Los Recursos para ${fmtInt(missingResources.length)}.`, "bad")
+    return
+  }
+
   const plan = findBestTrainingPlan()
   renderTrainingSummary(plan.feasible ? plan : null)
   renderTrainingResult(plan.feasible ? plan : null)
@@ -809,9 +823,17 @@ async function init(){
   $("btnImportTraining").addEventListener("click", () => {
     const info = importTrainingVillages()
     if(info.mergedCount > 0){
-      $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
+      if(info.resourceCount === 0){
+        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Aldeas reconocidas: ${fmtInt(info.mergedCount)} · Falta pegar Los Recursos.`
+      } else if(info.missingResourceCount > 0){
+        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
+      } else {
+        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
+      }
     } else {
-      $("trainingImportStatus").textContent = "No se encontraron aldeas validas al cruzar ambos pegados."
+      $("trainingImportStatus").textContent = info.capacityCount > 0
+        ? "No se reconocieron aldeas validas para importar."
+        : "No se encontraron aldeas en el bloque de Capacidad aldea."
     }
     recalc()
   })
