@@ -106,6 +106,95 @@ Homepage Discord News Support Game rules Terms Imprint
 © 2004 - 2026 Travian Games GmbH
 """
 
+RESOURCES_EXAMPLE = """Privacy settings
+3
+â€­3,183â€¬
+â€­2,031â€¬
+â€­45,700â€¬
+â€­11,882â€¬
+â€­8,649â€¬
+â€­3,860â€¬
+â€­31,300â€¬
+â€­14,393â€¬
+â€­29â€¬
+Switch to avatar for sitting
+Hero
+1
+Server time:  21:03:00
+Alliance banner
+SAQ 1
+Info box
+â€­â€­1â€¬Ã—â€¬
+
+    del
+    Find out all details about the upcoming Easter truce in our article.
+
+Link list
+
+    Lista de Vacas
+    LEER COSAS POR HACER
+    Tropas en aldea
+    Tiempo entrenamiento tropas
+
+Village overview
+Overview
+Resources
+Culture points
+Troops
+
+Resources
+
+Warehouse
+
+Production
+
+Capacity
+Village \t\t\t\t\tMerchants
+Villa Zero \tâ€­6,809â€¬ \tâ€­7,327â€¬ \tâ€­6,807â€¬ \tâ€­14,285â€¬ \tâ€­â€­12â€¬/â€­12â€¬â€¬
+FO001 \tâ€­10,511â€¬ \tâ€­12,128â€¬ \tâ€­6,553â€¬ \tâ€­14,960â€¬ \tâ€­â€­12â€¬/â€­12â€¬â€¬
+FO002 \tâ€­8,504â€¬ \tâ€­14,515â€¬ \tâ€­3,632â€¬ \tâ€­10,972â€¬ \tâ€­â€­12â€¬/â€­12â€¬â€¬
+Villa Pokemon \tâ€­4,921â€¬ \tâ€­4,921â€¬ \tâ€­4,922â€¬ \tâ€­199,584â€¬ \tâ€­â€­20â€¬/â€­20â€¬â€¬
+Villa Tormento \tâ€­2,313â€¬ \tâ€­10,877â€¬ \tâ€­74,633â€¬ \tâ€­858,637â€¬ \tâ€­â€­20â€¬/â€­20â€¬â€¬
+Villa Esperanza \tâ€­7,411â€¬ \tâ€­15,792â€¬ \tâ€­14,720â€¬ \tâ€­32,250â€¬ \tâ€­â€­17â€¬/â€­17â€¬â€¬
+Villa EmociÃ³n \tâ€­3,449â€¬ \tâ€­25,637â€¬ \tâ€­12,998â€¬ \tâ€­13,813â€¬ \tâ€­â€­12â€¬/â€­12â€¬â€¬
+Villa Charizard \tâ€­2,103â€¬ \tâ€­7,376â€¬ \tâ€­23,226â€¬ \tâ€­7,226â€¬ \tâ€­â€­13â€¬/â€­13â€¬â€¬
+Ojitos Rojos \tâ€­11,882â€¬ \tâ€­8,649â€¬ \tâ€­3,860â€¬ \tâ€­14,393â€¬ \tâ€­â€­1â€¬/â€­1â€¬â€¬
+Sum \tâ€­57,903â€¬ \tâ€­107,222â€¬ \tâ€­151,351â€¬ \tâ€­1,166,120â€¬ \tâ€­â€­119â€¬/â€­119â€¬â€¬
+Team_Tocabolus
+Population: â€­211â€¬
+Loyalty: â€­â€­100â€¬%â€¬
+Villages â€­â€­9â€¬/â€­9â€¬â€¬
+
+Village groups(â€­â€­5â€¬/â€­20â€¬â€¬)
+Zona Inicial
+Villa Zero
+â€­(â€­25â€¬|â€­âˆ’â€­53â€¬â€¬)â€¬
+FO001
+â€­(â€­23â€¬|â€­âˆ’â€­64â€¬â€¬)â€¬
+FO002
+â€­(â€­17â€¬|â€­âˆ’â€­89â€¬â€¬)â€¬
+Capital
+Villa Pokemon
+â€­(â€­83â€¬|â€­âˆ’â€­166â€¬â€¬)â€¬
+Gasolinera
+Villa Tormento
+â€­(â€­84â€¬|â€­âˆ’â€­165â€¬â€¬)â€¬
+Aldeas OFF
+Villa Esperanza
+â€­(â€­84â€¬|â€­âˆ’â€­166â€¬â€¬)â€¬
+Aldeas DEFF
+Villa EmociÃ³n
+â€­(â€­84â€¬|â€­âˆ’â€­164â€¬â€¬)â€¬
+Villa Charizard
+â€­(â€­83â€¬|â€­âˆ’â€­168â€¬â€¬)â€¬
+Ojitos Rojos
+â€­(â€­81â€¬|â€­âˆ’â€­168â€¬â€¬)â€¬
+Task overview
+Homepage Discord News Support Game rules Terms Imprint
+
+Â© 2004 - 2026 Travian Games GmbH
+"""
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -324,6 +413,46 @@ def test_npc_training_capacity_import_without_resources(driver, base_url):
     assert "Falta pegar Los Recursos para 9" in page_status, "NPC entrenamiento no aviso que faltan recursos tras importar capacidad"
 
 
+def test_npc_training_resources_parser(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    rows = driver.execute_script(
+        "return parseTravianTable(arguments[0], parseResourcesRow, 'resources');",
+        RESOURCES_EXAMPLE
+    )
+
+    assert len(rows) == 9, f"Se esperaban 9 aldeas en recursos y llegaron {len(rows)}"
+
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["Villa Zero"]["current"]["wood"] == 6809, "Villa Zero no parseo madera"
+    assert by_name["Villa Zero"]["current"]["crop"] == 14285, "Villa Zero no parseo cereal"
+    assert by_name["Villa Tormento"]["current"]["iron"] == 74633, "Villa Tormento no parseo hierro"
+    assert by_name["Ojitos Rojos"]["current"]["crop"] == 14393, "Ojitos Rojos no parseo cereal"
+
+
+def test_npc_training_capacity_and_resources_import(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        CAPACITY_EXAMPLE,
+        RESOURCES_EXAMPLE
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 9
+    )
+
+    status = driver.find_element(By.ID, "trainingImportStatus").text
+    central_options = Select(driver.find_element(By.ID, "trainingCentralVillage")).options
+    assert "Cruce valido: 9" in status, "NPC entrenamiento no cruzo capacidad y recursos para las 9 aldeas"
+    assert len(central_options) == 9, "NPC entrenamiento no lleno las candidatas a aldea central"
+
+
 def main():
     try:
         driver = build_driver()
@@ -343,6 +472,8 @@ def main():
                 ("npc", test_npc),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
+                ("npc_training_resources_parser", test_npc_training_resources_parser),
+                ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

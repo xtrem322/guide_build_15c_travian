@@ -10,6 +10,23 @@ let CATALOG_TROOPS = null
 let trainingVillages = []
 let trainingCentralKey = ""
 let trainingVillageId = 0
+let trainingLastImportSummary = "Sin datos importados."
+
+function fixCommonMojibake(text){
+  return String(text || "")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .replace(/ÃÁ/g, "A")
+    .replace(/Ã‰/g, "E")
+    .replace(/ÃÍ/g, "I")
+    .replace(/Ã“/g, "O")
+    .replace(/Ãš/g, "U")
+    .replace(/Ã‘/g, "N")
+}
 
 function n0(v){
   const x = Number(v)
@@ -151,12 +168,30 @@ function hasEnoughResources(have, need){
 }
 
 function normalizeVillageKey(name){
-  return String(name || "")
+  return fixCommonMojibake(name)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
+}
+
+function cleanVillageNameText(text){
+  const tokens = fixCommonMojibake(text)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(token => {
+      const cleaned = token.replace(/[^\p{Script=Latin}\d._()|'-]/gu, "")
+      if(!cleaned) return ""
+      if(cleaned === token) return cleaned
+      if(cleaned.length > 1 || /\d/.test(cleaned)) return cleaned
+      return ""
+    })
+    .filter(Boolean)
+
+  return tokens.join(" ").trim()
 }
 
 function cleanTravianPaste(raw){
@@ -191,7 +226,7 @@ function findTableStart(lines, type){
   for(let i = 0; i < lines.length; i++){
     const line = lines[i]
     if(type === "capacity" && /^Village\s+Warehouse\s+Granary$/i.test(line)) return i + 1
-    if(type === "resources" && /^Village\s+.+\s+Merchants$/i.test(line)) return i + 1
+    if(type === "resources" && /^Village(?:\s+.+)?\s+Merchants$/i.test(line)) return i + 1
   }
 
   for(let i = 0; i < lines.length; i++){
@@ -203,17 +238,14 @@ function findTableStart(lines, type){
 }
 
 function parseCapacityRow(line){
-  const tokens = line.split(" ").filter(Boolean)
-  const numericIdx = []
-  for(let i = 0; i < tokens.length; i++){
-    if(isIntegerToken(tokens[i])) numericIdx.push(i)
-  }
-  if(numericIdx.length < 2) return null
+  const matches = [...String(line || "").matchAll(/\d[\d,.]*/g)]
+  if(matches.length < 2) return null
 
-  const firstNumeric = numericIdx[numericIdx.length - 2]
-  const warehouse = parseNumberToken(tokens[firstNumeric])
-  const granary = parseNumberToken(tokens[firstNumeric + 1])
-  const name = tokens.slice(0, firstNumeric).join(" ").trim()
+  const warehouseMatch = matches[matches.length - 2]
+  const granaryMatch = matches[matches.length - 1]
+  const warehouse = parseNumberToken(warehouseMatch[0])
+  const granary = parseNumberToken(granaryMatch[0])
+  const name = cleanVillageNameText(String(line || "").slice(0, warehouseMatch.index))
 
   if(!name || !Number.isFinite(warehouse) || !Number.isFinite(granary)) return null
   if(/^(Village|Warehouse|Granary|Resources|Production|Capacity)$/i.test(name)) return null
@@ -223,19 +255,15 @@ function parseCapacityRow(line){
 }
 
 function parseResourcesRow(line){
-  const tokens = line.split(" ").filter(Boolean)
-  if(tokens[tokens.length - 1] && /^\d+\/\d+$/.test(tokens[tokens.length - 1])) tokens.pop()
+  const matches = [...String(line || "").matchAll(/\d[\d,.]*/g)]
+  if(matches.length < 4) return null
 
-  const trailing = []
-  for(let i = tokens.length - 1; i >= 0; i--){
-    if(isIntegerToken(tokens[i])) trailing.push(i)
-    else break
-  }
-  if(trailing.length < 4) return null
+  const merchantTail = /\/\D*\d[\d,.]*\D*$/i.test(String(line || ""))
+  const resourceMatches = merchantTail ? matches.slice(-6, -2) : matches.slice(-4)
+  if(resourceMatches.length < 4) return null
 
-  const firstNumeric = trailing[trailing.length - 4]
-  const numbers = tokens.slice(firstNumeric, firstNumeric + 4).map(parseNumberToken)
-  const name = tokens.slice(0, firstNumeric).join(" ").trim()
+  const numbers = resourceMatches.map(match => parseNumberToken(match[0]))
+  const name = cleanVillageNameText(String(line || "").slice(0, resourceMatches[0].index))
 
   if(!name || numbers.some(v => !Number.isFinite(v))) return null
   if(/^(Village|Resources|Warehouse|Production|Capacity|Merchants)$/i.test(name)) return null
@@ -781,7 +809,8 @@ function recalc(){
   renderTrainingVillageTable()
 
   if(!trainingVillages.length){
-    $("trainingImportStatus").textContent = "Sin datos importados."
+    trainingLastImportSummary = "Sin datos importados."
+    $("trainingImportStatus").textContent = trainingLastImportSummary
     renderTrainingSummary(null)
     renderTrainingResult(null)
     showStatus("Pega Capacidad aldea y Los Recursos para empezar.", "")
@@ -790,6 +819,7 @@ function recalc(){
 
   const missingResources = trainingVillages.filter(v => !v.hasResources)
   if(missingResources.length){
+    $("trainingImportStatus").textContent = trainingLastImportSummary
     renderTrainingSummary(null)
     renderTrainingResult(null)
     showStatus(`Capacidad importada para ${fmtInt(trainingVillages.length)} aldeas. Falta pegar Los Recursos para ${fmtInt(missingResources.length)}.`, "bad")
@@ -804,7 +834,7 @@ function recalc(){
     $("trainingImportStatus").textContent = `Tiempo comun: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(trainingVillages.length)}`
     showStatus(`OK. Tiempo comun: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
   } else {
-    $("trainingImportStatus").textContent = plan.reason
+    $("trainingImportStatus").textContent = trainingLastImportSummary
     showStatus(plan.reason, "bad")
   }
 }
@@ -824,17 +854,18 @@ async function init(){
     const info = importTrainingVillages()
     if(info.mergedCount > 0){
       if(info.resourceCount === 0){
-        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Aldeas reconocidas: ${fmtInt(info.mergedCount)} · Falta pegar Los Recursos.`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Aldeas reconocidas: ${fmtInt(info.mergedCount)} · Falta pegar Los Recursos.`
       } else if(info.missingResourceCount > 0){
-        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
       } else {
-        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
       }
     } else {
-      $("trainingImportStatus").textContent = info.capacityCount > 0
+      trainingLastImportSummary = info.capacityCount > 0
         ? "No se reconocieron aldeas validas para importar."
         : "No se encontraron aldeas en el bloque de Capacidad aldea."
     }
+    $("trainingImportStatus").textContent = trainingLastImportSummary
     recalc()
   })
   $("trainingCentralVillage").addEventListener("change", () => {
