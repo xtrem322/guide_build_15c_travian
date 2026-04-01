@@ -196,11 +196,11 @@ Homepage Discord News Support Game rules Terms Imprint
 """
 
 TRAINING_NAME_REPLACEMENTS = {
-    "Villa Esperanza": "H: Villa Esperanza",
-    "Villa EmociÃ³n": "GA: Villa EmociÃ³n",
-    "Villa Emoción": "GA: Villa Emoción",
-    "Villa Charizard": "GE: Villa Charizard",
-    "Ojitos Rojos": "R: Ojitos Rojos",
+    "Villa Esperanza": "FH: Villa Esperanza",
+    "Villa EmociÃ³n": "FGA: Villa EmociÃ³n",
+    "Villa Emoción": "FGA: Villa Emoción",
+    "Villa Charizard": "FGE: Villa Charizard",
+    "Ojitos Rojos": "FR: Ojitos Rojos",
 }
 
 
@@ -476,6 +476,78 @@ def test_npc_training_capacity_and_resources_import(driver, base_url):
     assert {"GALOS", "GERMANO", "HUNOS", "ROMANO"}.issubset(set(race_cells)), "NPC entrenamiento no detecto la raza desde las siglas del nombre"
 
 
+def test_npc_training_central_total_and_village_transfers(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalGetTrainingRequirement = getTrainingRequirement;
+        const originalFindVillageCurrentTime = findVillageCurrentTime;
+        const originalGetTrainingCentralCandidates = getTrainingCentralCandidates;
+        try {
+          const fake = (name, key, current, isTraining) => ({
+            id: key,
+            name,
+            key,
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal(current),
+            hasResources: true,
+            barracksTroop: "X",
+            stableTroop: "Y",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0
+          });
+
+          allVillages = [
+            fake("Central", "central", { wood: 1000, clay: 0, iron: 0, crop: 0 }, false),
+            fake("FA Aldea A", "a", { wood: 300, clay: 0, iron: 0, crop: 0 }, true),
+            fake("FR Aldea B", "b", { wood: 0, clay: 0, iron: 300, crop: 0 }, true)
+          ];
+          trainingVillages = allVillages.filter(v => v.isTraining);
+          trainingCentralKey = "central";
+
+          getTrainingRequirement = (village) => {
+            if (village.key === "a") return { queues:[{label:"C"}], counts:[{label:"C", units:10}], resources: withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 }) };
+            if (village.key === "b") return { queues:[{label:"E"}], counts:[{label:"E", units:10}], resources: withResourceTotal({ wood: 300, clay: 0, iron: 0, crop: 0 }) };
+            return { queues:[], counts:[], resources: zeroResources() };
+          };
+          findVillageCurrentTime = (village) => village.key === "a" ? 60 : 120;
+          getTrainingCentralCandidates = () => allVillages.slice();
+
+          const plan = evaluateTrainingTarget(300);
+          return {
+            feasible: plan.feasible,
+            npcTotal: plan.totalTransfer.total,
+            npcWood: plan.totalTransfer.wood,
+            npcIron: plan.totalTransfer.iron,
+            transfers: plan.villageTransfers,
+            statuses: plan.villagePlans.map(item => ({ name: item.village.name, status: item.status }))
+          };
+        } finally {
+          getTrainingRequirement = originalGetTrainingRequirement;
+          findVillageCurrentTime = originalFindVillageCurrentTime;
+          getTrainingCentralCandidates = originalGetTrainingCentralCandidates;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC entrenamiento no considero a la central como bolsa total"
+    assert result["npcTotal"] == 100 and result["npcWood"] == 100 and result["npcIron"] == 0, "NPC entrenamiento no optimizo el faltante restante en la central"
+    assert len(result["transfers"]) == 2, "NPC entrenamiento no genero envios entre aldeas cuando habia excedentes utiles"
+    assert {item["status"] for item in result["statuses"]} == {"Envio", "NPC"}, "NPC entrenamiento no distinguio entre apoyo entre aldeas y NPC central"
+
+
 def main():
     try:
         driver = build_driver()
@@ -497,6 +569,7 @@ def main():
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
                 ("npc_training_resources_parser", test_npc_training_resources_parser),
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
+                ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

@@ -20,6 +20,7 @@ const TRAINING_RACE_PREFIX = {
   S: "ESPARTANO",
   H: "HUNOS"
 }
+const RESOURCE_KEYS = ["wood", "clay", "iron", "crop"]
 
 function fixCommonMojibake(text){
   return String(text || "")
@@ -92,7 +93,7 @@ function raceList(){
 
 function parseVillageTrainingTag(name){
   const displayName = cleanVillageNameText(name)
-  const match = displayName.match(/^(GA|GE|R|E|S|H)(?:\s*[:\-]\s*|\s+)(.+)$/i)
+  const match = displayName.match(/^F(?:\s*[:\-]\s*|\s*)(GA|GE|R|E|S|H)(?:\s*[:\-]\s*|\s+)(.+)$/i)
   if(!match){
     return {
       displayName,
@@ -103,10 +104,11 @@ function parseVillageTrainingTag(name){
   }
 
   const prefix = String(match[1] || "").toUpperCase()
+  const baseName = cleanVillageNameText(match[2] || "")
   const race = TRAINING_RACE_PREFIX[prefix] || ""
   return {
-    displayName,
-    isTraining: Boolean(race),
+    displayName: baseName || displayName,
+    isTraining: Boolean(baseName && race),
     race,
     raceSupported: raceList().includes(race)
   }
@@ -196,6 +198,19 @@ function hasEnoughResources(have, need){
     n0(have?.clay) >= n0(need?.clay) &&
     n0(have?.iron) >= n0(need?.iron) &&
     n0(have?.crop) >= n0(need?.crop)
+}
+
+function getEffectiveTrainingVillages(){
+  return trainingVillages.filter(v => v.key !== trainingCentralKey)
+}
+
+function getResourceSurplus(current, required){
+  return withResourceTotal({
+    wood: Math.max(0, n0(current?.wood) - n0(required?.wood)),
+    clay: Math.max(0, n0(current?.clay) - n0(required?.clay)),
+    iron: Math.max(0, n0(current?.iron) - n0(required?.iron)),
+    crop: Math.max(0, n0(current?.crop) - n0(required?.crop))
+  })
 }
 
 function normalizeVillageKey(name){
@@ -464,12 +479,7 @@ function getTrainingRequirement(village, targetSec){
   }
 
   const resources = withResourceTotal(required)
-  const fitsCap = resources.wood <= village.warehouseCap &&
-    resources.clay <= village.warehouseCap &&
-    resources.iron <= village.warehouseCap &&
-    resources.crop <= village.granaryCap
-
-  return { queues, counts, resources, fitsCap }
+  return { queues, counts, resources }
 }
 
 function findVillageCurrentTime(village){
@@ -482,7 +492,7 @@ function findVillageCurrentTime(village){
 
   while(hi < maxSec){
     const req = getTrainingRequirement(village, hi)
-    if(!req.fitsCap || !hasEnoughResources(village.current, req.resources)) break
+    if(!hasEnoughResources(village.current, req.resources)) break
     lo = hi
     hi *= 2
   }
@@ -492,7 +502,7 @@ function findVillageCurrentTime(village){
   while(lo < hi){
     const mid = Math.floor((lo + hi + 1) / 2)
     const req = getTrainingRequirement(village, mid)
-    if(req.fitsCap && hasEnoughResources(village.current, req.resources)) lo = mid
+    if(hasEnoughResources(village.current, req.resources)) lo = mid
     else hi = mid - 1
   }
 
@@ -500,17 +510,16 @@ function findVillageCurrentTime(village){
 }
 
 function evaluateTrainingTarget(targetSec){
-  if(!trainingVillages.length) return { feasible:false, reason:"Importa aldeas primero." }
+  const activeVillages = getEffectiveTrainingVillages()
+  if(!activeVillages.length) return { feasible:false, reason:"Importa aldeas primero." }
 
   const central = allVillages.find(v => v.key === trainingCentralKey)
   if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
 
   const plans = []
-  let totalTransfer = zeroResources()
-  let centralNeed = zeroResources()
   let activeQueues = 0
 
-  for(const village of trainingVillages){
+  for(const village of activeVillages){
     const currentTime = findVillageCurrentTime(village)
     const req = getTrainingRequirement(village, targetSec)
 
@@ -518,7 +527,12 @@ function evaluateTrainingTarget(targetSec){
       plans.push({
         village,
         currentTime,
+        required: zeroResources(),
         deficit: zeroResources(),
+        deficitBeforeVillageSupport: zeroResources(),
+        surplus: zeroResources(),
+        supportFromVillages: zeroResources(),
+        supportFromCentral: zeroResources(),
         counts: [],
         status: "Sin colas"
       })
@@ -526,34 +540,17 @@ function evaluateTrainingTarget(targetSec){
     }
 
     activeQueues += req.queues.length
-
-    if(!req.fitsCap){
-      return { feasible:false, reason:`${village.name} no soporta ese tiempo por almacen o granero.` }
-    }
-
-    if(village.key === trainingCentralKey){
-      centralNeed = req.resources
-      if(!hasEnoughResources(village.current, req.resources)){
-        return { feasible:false, reason:`${village.name} no alcanza para sostener su propia cola objetivo.` }
-      }
-      plans.push({
-        village,
-        currentTime,
-        deficit: zeroResources(),
-        counts: req.counts,
-        status: "Central"
-      })
-      continue
-    }
-
-    const deficit = positiveDeficit(req.resources, village.current)
-    totalTransfer = addResources(totalTransfer, deficit)
     plans.push({
       village,
       currentTime,
-      deficit,
+      required: req.resources,
+      deficit: zeroResources(),
+      deficitBeforeVillageSupport: positiveDeficit(req.resources, village.current),
+      surplus: getResourceSurplus(village.current, req.resources),
+      supportFromVillages: zeroResources(),
+      supportFromCentral: zeroResources(),
       counts: req.counts,
-      status: deficit.total > 0 ? "NPC" : "Lista"
+      status: "Lista"
     })
   }
 
@@ -561,18 +558,61 @@ function evaluateTrainingTarget(targetSec){
     return { feasible:false, reason:"Configura al menos una cola de entrenamiento." }
   }
 
-  const centralAvailable = subtractResources(central.current, centralNeed)
-  if(!hasEnoughResources(centralAvailable, totalTransfer)){
-    return { feasible:false, reason:"La aldea central no tiene recursos suficientes para cubrir el reparto." }
+  const villageTransfers = []
+  for(const resource of RESOURCE_KEYS){
+    const donors = plans
+      .filter(item => n0(item.surplus?.[resource]) > 0)
+      .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
+    const receivers = plans
+      .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
+      .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+
+    for(const receiver of receivers){
+      let missing = n0(receiver.deficitBeforeVillageSupport?.[resource])
+      for(const donor of donors){
+        if(donor.village.key === receiver.village.key || missing <= 0) continue
+        const available = n0(donor.surplus?.[resource])
+        if(available <= 0) continue
+        const amount = Math.min(available, missing)
+        donor.surplus[resource] -= amount
+        donor.surplus = withResourceTotal(donor.surplus)
+        receiver.deficitBeforeVillageSupport[resource] -= amount
+        receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
+        receiver.supportFromVillages[resource] += amount
+        receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
+        villageTransfers.push({
+          from: donor.village.name,
+          to: receiver.village.name,
+          resource,
+          amount
+        })
+        missing -= amount
+      }
+    }
+  }
+
+  let centralNpcNeed = zeroResources()
+  for(const plan of plans){
+    plan.supportFromCentral = withResourceTotal(plan.deficitBeforeVillageSupport)
+    plan.deficit = withResourceTotal(plan.deficitBeforeVillageSupport)
+    centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
+    if(plan.supportFromCentral.total > 0) plan.status = "NPC"
+    else if(plan.supportFromVillages.total > 0) plan.status = "Envio"
+    else if(plan.counts.length) plan.status = "Lista"
+  }
+
+  if(n0(central.current?.total) < n0(centralNpcNeed.total)){
+    return { feasible:false, reason:"La aldea central no tiene total suficiente para cubrir el reparto NPC." }
   }
 
   return {
     feasible: true,
     targetSec,
     villagePlans: plans,
-    totalTransfer,
+    totalTransfer: centralNpcNeed,
+    villageTransfers,
     central,
-    centralAvailable,
+    centralAvailable: withResourceTotal(central.current),
     activeQueues
   }
 }
@@ -654,8 +694,9 @@ function renderTrainingVillageTable(){
   const body = $("trainingVillageBody")
   const wrap = $("trainingTableWrap")
   body.innerHTML = ""
+  const activeVillages = getEffectiveTrainingVillages()
 
-  if(!trainingVillages.length){
+  if(!activeVillages.length){
     wrap.style.display = "none"
     return
   }
@@ -674,7 +715,7 @@ function renderTrainingVillageTable(){
   ]
   const levelOpts = Array.from({ length: 20 }, (_, idx) => ({ value:String(idx + 1), label:String(idx + 1) }))
 
-  for(const village of trainingVillages){
+  for(const village of activeVillages){
     const tr = document.createElement("tr")
     const barracksOptions = trainingSelectOptions(getTroopsByRaceAndTipo(village.race, "C").map(t => String(t.name)).sort((a, b) => a.localeCompare(b, "es")), true)
     const stableOptions = trainingSelectOptions(getTroopsByRaceAndTipo(village.race, "E").map(t => String(t.name)).sort((a, b) => a.localeCompare(b, "es")), true)
@@ -742,7 +783,8 @@ function renderTrainingSummary(plan){
     return
   }
 
-  const activeVillages = trainingVillages.filter(v => buildTrainingQueues(v).length > 0).length
+  const effectiveVillages = getEffectiveTrainingVillages()
+  const activeVillages = effectiveVillages.filter(v => buildTrainingQueues(v).length > 0).length
   summary.style.display = "grid"
   summary.innerHTML = `
     <div class="training-summary-card">
@@ -751,11 +793,11 @@ function renderTrainingSummary(plan){
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Aldeas entrenamiento</div>
-      <div class="training-summary-value">${fmtInt(trainingVillages.length)}</div>
+      <div class="training-summary-value">${fmtInt(effectiveVillages.length)}</div>
     </div>
     <div class="training-summary-card">
-      <div class="training-summary-label">Aldeas activas</div>
-      <div class="training-summary-value">${fmtInt(activeVillages)}</div>
+      <div class="training-summary-label">Colas activas</div>
+      <div class="training-summary-value">${fmtInt(plan?.activeQueues || activeVillages)}</div>
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Tiempo comun</div>
@@ -781,7 +823,7 @@ function renderTrainingResult(plan){
   }
 
   wrap.style.display = "block"
-  const centralRemaining = subtractResources(plan.centralAvailable, plan.totalTransfer)
+  const centralRemainingTotal = Math.max(0, n0(plan.centralAvailable?.total) - n0(plan.totalTransfer?.total))
 
   body.innerHTML = `
     <div class="training-result-meta">
@@ -799,7 +841,13 @@ function renderTrainingResult(plan){
       </div>
       <div class="training-summary-card">
         <div class="training-summary-label">Central restante</div>
-        <div class="training-summary-value">${fmtInt(centralRemaining.total)}</div>
+        <div class="training-summary-value">${fmtInt(centralRemainingTotal)}</div>
+      </div>
+    </div>
+    <div class="training-result-meta">
+      <div class="training-summary-card">
+        <div class="training-summary-label">NPC central</div>
+        <div class="training-summary-value">${fmtInt(plan.totalTransfer.wood)} / ${fmtInt(plan.totalTransfer.clay)} / ${fmtInt(plan.totalTransfer.iron)} / ${fmtInt(plan.totalTransfer.crop)}</div>
       </div>
     </div>
     <table class="training-transfer-table">
@@ -820,7 +868,7 @@ function renderTrainingResult(plan){
         ${plan.villagePlans.map(item => `
           <tr>
             <td class="left">${item.village.name}</td>
-            <td class="${item.status === "NPC" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
+            <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
             <td>${fmtTime(item.currentTime)}</td>
             <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
             <td>${queueCountLabel(item.counts)}</td>
@@ -832,6 +880,29 @@ function renderTrainingResult(plan){
         `).join("")}
       </tbody>
     </table>
+    ${plan.villageTransfers.length ? `
+      <div class="troop-matrix-title" style="margin-top:18px">Envios Entre Aldeas</div>
+      <table class="training-transfer-table">
+        <thead>
+          <tr>
+            <th class="left">Desde</th>
+            <th class="left">Hacia</th>
+            <th>Recurso</th>
+            <th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${plan.villageTransfers.map(item => `
+            <tr>
+              <td class="left">${item.from}</td>
+              <td class="left">${item.to}</td>
+              <td>${item.resource}</td>
+              <td>${fmtInt(item.amount)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    ` : ""}
   `
 }
 
@@ -859,7 +930,7 @@ function recalc(){
     return
   }
 
-  if(!trainingVillages.length){
+  if(!getEffectiveTrainingVillages().length){
     $("trainingImportStatus").textContent = trainingLastImportSummary
     renderTrainingSummary(null)
     renderTrainingResult(null)
@@ -872,7 +943,7 @@ function recalc(){
   renderTrainingResult(plan.feasible ? plan : null)
 
   if(plan.feasible){
-    $("trainingImportStatus").textContent = `Tiempo comun: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(trainingVillages.length)}`
+    $("trainingImportStatus").textContent = `Tiempo comun: ${fmtTime(plan.targetSec)} · NPC central: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(getEffectiveTrainingVillages().length)}`
     showStatus(`OK. Tiempo comun: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
   } else {
     $("trainingImportStatus").textContent = trainingLastImportSummary
