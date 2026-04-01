@@ -195,6 +195,22 @@ Homepage Discord News Support Game rules Terms Imprint
 Â© 2004 - 2026 Travian Games GmbH
 """
 
+TRAINING_NAME_REPLACEMENTS = {
+    "Villa Esperanza": "H: Villa Esperanza",
+    "Villa EmociÃ³n": "GA: Villa EmociÃ³n",
+    "Villa Emoción": "GA: Villa Emoción",
+    "Villa Charizard": "GE: Villa Charizard",
+    "Ojitos Rojos": "R: Ojitos Rojos",
+}
+
+
+def with_training_prefixes(raw):
+    text = raw
+    for old, new in TRAINING_NAME_REPLACEMENTS.items():
+        text = text.replace(old, new)
+    return text
+
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -397,20 +413,23 @@ def test_npc_training_capacity_import_without_resources(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
 
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
     driver.execute_script(
         "document.getElementById('trainingCapacityInput').value = arguments[0];",
-        CAPACITY_EXAMPLE
+        capacity_training
     )
     driver.find_element(By.ID, "btnImportTraining").click()
 
     WebDriverWait(driver, 10).until(
-        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 9
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
     )
 
     status = driver.find_element(By.ID, "trainingImportStatus").text
     page_status = driver.find_element(By.ID, "statusLine").text
-    assert "Aldeas reconocidas: 9" in status, "NPC entrenamiento no reconocio las 9 aldeas al importar solo capacidad"
+    central_options = Select(driver.find_element(By.ID, "trainingCentralVillage")).options
+    assert "Importadas: 9" in status and "Entrenamiento: 4" in status, "NPC entrenamiento no separo aldeas importadas y aldeas de entrenamiento"
     assert "Falta pegar Los Recursos para 9" in page_status, "NPC entrenamiento no aviso que faltan recursos tras importar capacidad"
+    assert len(central_options) == 9, "NPC entrenamiento no mantuvo las 9 aldeas como candidatas a central"
 
 
 def test_npc_training_resources_parser(driver, base_url):
@@ -435,22 +454,26 @@ def test_npc_training_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
 
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
     driver.execute_script(
         "document.getElementById('trainingCapacityInput').value = arguments[0];"
         "document.getElementById('trainingResourcesInput').value = arguments[1];",
-        CAPACITY_EXAMPLE,
-        RESOURCES_EXAMPLE
+        capacity_training,
+        resources_training
     )
     driver.find_element(By.ID, "btnImportTraining").click()
 
     WebDriverWait(driver, 10).until(
-        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 9
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
     )
 
     status = driver.find_element(By.ID, "trainingImportStatus").text
     central_options = Select(driver.find_element(By.ID, "trainingCentralVillage")).options
-    assert "Cruce valido: 9" in status, "NPC entrenamiento no cruzo capacidad y recursos para las 9 aldeas"
+    race_cells = [cell.text for cell in driver.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr td:nth-child(2)")]
+    assert "Cruce valido: 9" in status and "Entrenamiento: 4" in status, "NPC entrenamiento no cruzo bien las aldeas importadas y de entrenamiento"
     assert len(central_options) == 9, "NPC entrenamiento no lleno las candidatas a aldea central"
+    assert {"GALOS", "GERMANO", "HUNOS", "ROMANO"}.issubset(set(race_cells)), "NPC entrenamiento no detecto la raza desde las siglas del nombre"
 
 
 def main():

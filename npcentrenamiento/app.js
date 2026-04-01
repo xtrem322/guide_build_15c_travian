@@ -7,10 +7,19 @@ const BUILDING_TIME_FACTOR = [
 ]
 
 let CATALOG_TROOPS = null
+let allVillages = []
 let trainingVillages = []
 let trainingCentralKey = ""
 let trainingVillageId = 0
 let trainingLastImportSummary = "Sin datos importados."
+const TRAINING_RACE_PREFIX = {
+  GA: "GALOS",
+  GE: "GERMANO",
+  R: "ROMANO",
+  E: "EGIPTO",
+  S: "ESPARTANO",
+  H: "HUNOS"
+}
 
 function fixCommonMojibake(text){
   return String(text || "")
@@ -78,7 +87,29 @@ function fillSelect(sel, items, keep){
 }
 
 function raceList(){
-  return ["HUNOS", "ROMANO", "GERMANO", "GALOS", "EGIPTO"]
+  return ["HUNOS", "ROMANO", "GERMANO", "GALOS", "EGIPTO", "ESPARTANO"]
+}
+
+function parseVillageTrainingTag(name){
+  const displayName = cleanVillageNameText(name)
+  const match = displayName.match(/^(GA|GE|R|E|S|H)(?:\s*[:\-]\s*|\s+)(.+)$/i)
+  if(!match){
+    return {
+      displayName,
+      isTraining: false,
+      race: "",
+      raceSupported: true
+    }
+  }
+
+  const prefix = String(match[1] || "").toUpperCase()
+  const race = TRAINING_RACE_PREFIX[prefix] || ""
+  return {
+    displayName,
+    isTraining: Boolean(race),
+    race,
+    raceSupported: raceList().includes(race)
+  }
 }
 
 function getTroopsByRaceAndTipo(race, tipo){
@@ -186,7 +217,7 @@ function cleanVillageNameText(text){
       const cleaned = token.replace(/[^\p{Script=Latin}\d._()|'-]/gu, "")
       if(!cleaned) return ""
       if(cleaned === token) return cleaned
-      if(cleaned.length > 1 || /\d/.test(cleaned)) return cleaned
+      if(cleaned.length > 1 || /\d/.test(cleaned) || /^[A-Za-z][:\-]*$/u.test(token)) return cleaned
       return ""
     })
     .filter(Boolean)
@@ -300,9 +331,10 @@ function parseTravianTable(raw, rowParser, type){
 }
 
 function defaultTrainingVillage(data, previous){
+  const tag = parseVillageTrainingTag(data.name)
   const base = previous ? { ...previous } : {
     id: ++trainingVillageId,
-    race: "HUNOS",
+    race: tag.race || "HUNOS",
     barracksTroop: "",
     barracksLvl: 1,
     stableTroop: "",
@@ -317,17 +349,20 @@ function defaultTrainingVillage(data, previous){
 
   return {
     ...base,
-    name: data.name,
+    name: tag.displayName,
     key: data.key,
     warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
-    hasResources: Boolean(data.hasResources)
+    hasResources: Boolean(data.hasResources),
+    isTraining: tag.isTraining,
+    race: tag.race || base.race,
+    raceSupported: tag.raceSupported
   }
 }
 
 function getTrainingCentralCandidates(){
-  return trainingVillages
+  return allVillages
     .slice()
     .sort((a, b) => {
       const byCurrent = n0(b.current?.total) - n0(a.current?.total)
@@ -342,7 +377,7 @@ function getTrainingCentralCandidates(){
 function importTrainingVillages(){
   const capacityRows = parseTravianTable($("trainingCapacityInput").value, parseCapacityRow, "capacity")
   const resourceRows = parseTravianTable($("trainingResourcesInput").value, parseResourcesRow, "resources")
-  const prevByKey = new Map(trainingVillages.map(v => [v.key, v]))
+  const prevByKey = new Map(allVillages.map(v => [v.key, v]))
   const resourceMap = new Map(resourceRows.map(r => [r.key, r]))
   const merged = []
 
@@ -356,10 +391,11 @@ function importTrainingVillages(){
   }
 
   merged.sort((a, b) => a.name.localeCompare(b.name, "es"))
-  trainingVillages = merged
+  allVillages = merged
+  trainingVillages = merged.filter(v => v.isTraining)
 
   const candidates = getTrainingCentralCandidates()
-  if(!trainingVillages.some(v => v.key === trainingCentralKey)){
+  if(!allVillages.some(v => v.key === trainingCentralKey)){
     trainingCentralKey = candidates[0]?.key || ""
   }
 
@@ -368,7 +404,8 @@ function importTrainingVillages(){
     resourceCount: resourceRows.length,
     mergedCount: merged.length,
     matchedCount: merged.filter(v => v.hasResources).length,
-    missingResourceCount: merged.filter(v => !v.hasResources).length
+    missingResourceCount: merged.filter(v => !v.hasResources).length,
+    trainingCount: trainingVillages.length
   }
 }
 
@@ -465,7 +502,7 @@ function findVillageCurrentTime(village){
 function evaluateTrainingTarget(targetSec){
   if(!trainingVillages.length) return { feasible:false, reason:"Importa aldeas primero." }
 
-  const central = trainingVillages.find(v => v.key === trainingCentralKey)
+  const central = allVillages.find(v => v.key === trainingCentralKey)
   if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
 
   const plans = []
@@ -601,7 +638,7 @@ function updateTrainingCentralSelect(){
   else sel.value = options[0]?.value || ""
   trainingCentralKey = sel.value || ""
 
-  const central = trainingVillages.find(v => v.key === trainingCentralKey)
+  const central = allVillages.find(v => v.key === trainingCentralKey)
   const meta = $("trainingCentralMeta")
   if(!central){
     meta.textContent = "Importa aldeas para elegir una central."
@@ -639,7 +676,6 @@ function renderTrainingVillageTable(){
 
   for(const village of trainingVillages){
     const tr = document.createElement("tr")
-    const raceOptions = raceList().map(r => ({ value:r, label:r }))
     const barracksOptions = trainingSelectOptions(getTroopsByRaceAndTipo(village.race, "C").map(t => String(t.name)).sort((a, b) => a.localeCompare(b, "es")), true)
     const stableOptions = trainingSelectOptions(getTroopsByRaceAndTipo(village.race, "E").map(t => String(t.name)).sort((a, b) => a.localeCompare(b, "es")), true)
     const workshopOptions = trainingSelectOptions(getTroopsByRaceAndTipo(village.race, "T").map(t => String(t.name)).sort((a, b) => a.localeCompare(b, "es")), true)
@@ -662,13 +698,8 @@ function renderTrainingVillageTable(){
     fixedCells.forEach((cell, idx) => {
       if(idx === 1){
         const td = document.createElement("td")
-        td.appendChild(renderSelectControl(raceOptions, village.race, (next) => {
-          village.race = next
-          village.barracksTroop = ""
-          village.stableTroop = ""
-          village.workshopTroop = ""
-          recalc()
-        }, "training-select"))
+        td.textContent = village.raceSupported ? village.race : `${village.race} (sin catalogo)`
+        td.classList.add("readonly")
         tr.appendChild(td)
         return
       }
@@ -705,7 +736,7 @@ function renderTrainingVillageTable(){
 
 function renderTrainingSummary(plan){
   const summary = $("trainingSummary")
-  if(!trainingVillages.length){
+  if(!allVillages.length){
     summary.style.display = "none"
     summary.innerHTML = ""
     return
@@ -716,15 +747,15 @@ function renderTrainingSummary(plan){
   summary.innerHTML = `
     <div class="training-summary-card">
       <div class="training-summary-label">Aldeas importadas</div>
+      <div class="training-summary-value">${fmtInt(allVillages.length)}</div>
+    </div>
+    <div class="training-summary-card">
+      <div class="training-summary-label">Aldeas entrenamiento</div>
       <div class="training-summary-value">${fmtInt(trainingVillages.length)}</div>
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Aldeas activas</div>
       <div class="training-summary-value">${fmtInt(activeVillages)}</div>
-    </div>
-    <div class="training-summary-card">
-      <div class="training-summary-label">Colas activas</div>
-      <div class="training-summary-value">${fmtInt(plan?.activeQueues || 0)}</div>
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Tiempo comun</div>
@@ -808,7 +839,9 @@ function recalc(){
   updateTrainingCentralSelect()
   renderTrainingVillageTable()
 
-  if(!trainingVillages.length){
+  if(!allVillages.length){
+    allVillages = []
+    trainingVillages = []
     trainingLastImportSummary = "Sin datos importados."
     $("trainingImportStatus").textContent = trainingLastImportSummary
     renderTrainingSummary(null)
@@ -817,12 +850,20 @@ function recalc(){
     return
   }
 
-  const missingResources = trainingVillages.filter(v => !v.hasResources)
+  const missingResources = allVillages.filter(v => !v.hasResources)
   if(missingResources.length){
     $("trainingImportStatus").textContent = trainingLastImportSummary
     renderTrainingSummary(null)
     renderTrainingResult(null)
-    showStatus(`Capacidad importada para ${fmtInt(trainingVillages.length)} aldeas. Falta pegar Los Recursos para ${fmtInt(missingResources.length)}.`, "bad")
+    showStatus(`Capacidad importada para ${fmtInt(allVillages.length)} aldeas. Falta pegar Los Recursos para ${fmtInt(missingResources.length)}.`, "bad")
+    return
+  }
+
+  if(!trainingVillages.length){
+    $("trainingImportStatus").textContent = trainingLastImportSummary
+    renderTrainingSummary(null)
+    renderTrainingResult(null)
+    showStatus("No se detectaron aldeas con siglas de raza para entrenamiento.", "bad")
     return
   }
 
@@ -854,11 +895,11 @@ async function init(){
     const info = importTrainingVillages()
     if(info.mergedCount > 0){
       if(info.resourceCount === 0){
-        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Aldeas reconocidas: ${fmtInt(info.mergedCount)} · Falta pegar Los Recursos.`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Importadas: ${fmtInt(info.mergedCount)} · Entrenamiento: ${fmtInt(info.trainingCount)} · Falta pegar Los Recursos.`
       } else if(info.missingResourceCount > 0){
-        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Entrenamiento: ${fmtInt(info.trainingCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
       } else {
-        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
+        trainingLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)} · Entrenamiento: ${fmtInt(info.trainingCount)}`
       }
     } else {
       trainingLastImportSummary = info.capacityCount > 0
