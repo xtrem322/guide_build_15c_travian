@@ -478,6 +478,42 @@ select,input{
   font-weight:900;
 }
 
+.split-cell-main{
+  font-weight:800;
+}
+
+.split-subvalue{
+  margin-top:6px;
+  font-size:12px;
+  font-weight:800;
+  color:var(--muted);
+}
+
+.split-toggle-group{
+  display:flex;
+  justify-content:center;
+  gap:6px;
+  margin-top:8px;
+  flex-wrap:wrap;
+}
+
+.split-toggle-btn{
+  border:1px solid var(--border);
+  background:var(--bg);
+  color:var(--muted);
+  border-radius:999px;
+  padding:4px 8px;
+  font-size:11px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+.split-toggle-btn.active{
+  background:var(--tm-accent);
+  border-color:var(--tm-accent);
+  color:#fff;
+}
+
 .training-transfer-table{
   width:100%;
   border-collapse:separate;

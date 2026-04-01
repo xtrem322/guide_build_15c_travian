@@ -584,6 +584,50 @@ def test_npc_training_npc_central_boxes(driver, base_url):
     assert result["values"] == ["323401", "244262", "215471", "54486"], "NPC central no mostro los valores en los cuadros correctos"
 
 
+def test_npc_training_split_buttons(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        """
+        trainingSplitModeByVillage = {};
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: [{
+            village: { key: "villa-a", name: "Villa A" },
+            status: "NPC",
+            currentTime: 0,
+            counts: [{ label:"C", units:341 }, { label:"E", units:57 }],
+            deficit: withResourceTotal({ wood: 64618, clay: 65521, iron: 83615, crop: 27932 })
+          }]
+        });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
+    labels_after_2 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]
+    active_after_2 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="2"]')
+    inactive_3 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="3"]')
+
+    driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="3"]').click()
+    labels_after_3 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]
+    active_after_3 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="3"]')
+    inactive_2 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="2"]')
+
+    assert any("x2: C:171" in text and "E:29" in text for text in labels_after_2), "Entre 2 no dividio las tropas en la segunda linea"
+    assert any("x2: 32309" in text for text in labels_after_2), "Entre 2 no dividio los recursos en la segunda linea"
+    assert len(active_after_2) == 1 and len(inactive_3) == 0, "Entre 2 no quedo como unico boton activo"
+    assert any("x3: C:114" in text and "E:19" in text for text in labels_after_3), "Entre 3 no dividio las tropas en la segunda linea"
+    assert any("x3: 21540" in text for text in labels_after_3), "Entre 3 no dividio los recursos en la segunda linea"
+    assert len(active_after_3) == 1 and len(inactive_2) == 0, "Entre 3 no reemplazo correctamente al boton activo"
+
+
 def main():
     try:
         driver = build_driver()
@@ -608,6 +652,7 @@ def main():
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
+                ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

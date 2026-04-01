@@ -12,6 +12,8 @@ let trainingVillages = []
 let trainingCentralKey = ""
 let trainingVillageId = 0
 let trainingLastImportSummary = "Sin datos importados."
+let trainingLastRenderedPlan = null
+let trainingSplitModeByVillage = {}
 const TRAINING_RACE_PREFIX = {
   GA: "GALOS",
   GE: "GERMANO",
@@ -815,6 +817,7 @@ function queueCountLabel(counts){
 function renderTrainingResult(plan){
   const wrap = $("trainingResultWrap")
   const body = $("trainingResultBody")
+  trainingLastRenderedPlan = plan || null
 
   if(!plan?.feasible){
     wrap.style.display = "none"
@@ -882,19 +885,25 @@ function renderTrainingResult(plan){
         </tr>
       </thead>
       <tbody>
-        ${plan.villagePlans.map(item => `
-          <tr>
-            <td class="left">${item.village.name}</td>
-            <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
-            <td>${fmtTime(item.currentTime)}</td>
-            <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
-            <td>${queueCountLabel(item.counts)}</td>
-            <td>${fmtInt(item.deficit.wood)}</td>
-            <td>${fmtInt(item.deficit.clay)}</td>
-            <td>${fmtInt(item.deficit.iron)}</td>
-            <td>${fmtInt(item.deficit.crop)}</td>
-          </tr>
-        `).join("")}
+        ${plan.villagePlans.map(item => {
+          const splitFactor = getSplitFactorForVillage(item.village.key)
+          return `
+            <tr>
+              <td class="left">${item.village.name}</td>
+              <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
+              <td>${fmtTime(item.currentTime)}</td>
+              <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
+              <td>
+                <div class="split-cell-main">${queueCountLabelWithSplit(item.counts, splitFactor)}</div>
+                ${renderSplitButtons(item.village.key)}
+              </td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.wood)}</div>${renderSplitValue(item.deficit.wood, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.clay)}</div>${renderSplitValue(item.deficit.clay, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.iron)}</div>${renderSplitValue(item.deficit.iron, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.crop)}</div>${renderSplitValue(item.deficit.crop, splitFactor)}</td>
+            </tr>
+          `
+        }).join("")}
       </tbody>
     </table>
     ${plan.villageTransfers.length ? `
@@ -921,6 +930,55 @@ function renderTrainingResult(plan){
       </table>
     ` : ""}
   `
+
+  body.querySelectorAll(".split-toggle-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleSplitFactorForVillage(
+        button.getAttribute("data-village-key") || "",
+        Math.floor(n0(button.getAttribute("data-factor")))
+      )
+    })
+  })
+}
+
+function getSplitFactorForVillage(villageKey){
+  const factor = Math.floor(n0(trainingSplitModeByVillage[villageKey]))
+  return factor === 2 || factor === 3 ? factor : 0
+}
+
+function toggleSplitFactorForVillage(villageKey, factor){
+  const current = getSplitFactorForVillage(villageKey)
+  trainingSplitModeByVillage[villageKey] = current === factor ? 0 : factor
+  renderTrainingSummary(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+  renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+}
+
+function renderSplitButtons(villageKey){
+  const factor = getSplitFactorForVillage(villageKey)
+  return `
+    <div class="split-toggle-group">
+      <button type="button" class="split-toggle-btn ${factor === 2 ? "active" : ""}" data-village-key="${villageKey}" data-factor="2">Entre 2</button>
+      <button type="button" class="split-toggle-btn ${factor === 3 ? "active" : ""}" data-village-key="${villageKey}" data-factor="3">Entre 3</button>
+    </div>
+  `
+}
+
+function splitAmount(value, factor){
+  return factor > 1 ? Math.ceil(n0(value) / factor) : 0
+}
+
+function renderSplitValue(value, factor){
+  if(factor <= 1) return ""
+  return `<div class="split-subvalue">x${factor}: ${fmtInt(splitAmount(value, factor))}</div>`
+}
+
+function queueCountLabelWithSplit(counts, factor){
+  const active = counts.filter(item => item.units > 0)
+  if(!active.length) return "-"
+  const main = active.map(item => `${item.label}:${fmtInt(item.units)}`).join(" Â· ")
+  if(factor <= 1) return main
+  const split = active.map(item => `${item.label}:${fmtInt(splitAmount(item.units, factor))}`).join(" Â· ")
+  return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
 }
 
 function recalc(){
