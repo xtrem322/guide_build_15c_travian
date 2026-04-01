@@ -309,6 +309,15 @@ def test_theme_toggle(driver, base_url):
         assert_theme_toggle(driver)
 
 
+def test_default_server_speed_x3(driver, base_url):
+    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/oasis/", "/listadevacas/"]
+    for path in paths:
+        driver.get(f"{base_url}{path}")
+        wait_for(driver, "#serverSpeed")
+        speed = Select(driver.find_element(By.ID, "serverSpeed")).first_selected_option.get_attribute("value")
+        assert speed == "3", f"{path} no inicia en velocidad x3"
+
+
 def test_roi(driver, base_url):
     driver.get(f"{base_url}/roi/")
     wait_for(driver, "#calcBtn")
@@ -563,6 +572,7 @@ def main():
         with local_server() as base_url:
             tests = [
                 ("theme", test_theme_toggle),
+                ("default_server_speed_x3", test_default_server_speed_x3),
                 ("roi", test_roi),
                 ("npc", test_npc),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
