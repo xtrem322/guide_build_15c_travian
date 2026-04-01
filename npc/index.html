@@ -22,7 +22,7 @@
     <div class="subtitle">Travian 15C Capital - Reparto de Recursos (NPC)</div>
 
     <div class="toolbar">
-      <div class="tool">
+      <div class="tool" id="toolRaceSelect">
         <div class="tool-label">Raza</div>
         <select id="raceSelect"></select>
       </div>
@@ -33,10 +33,11 @@
           <option value="eq">Opción 1: Equitativo</option>
           <option value="time">Opción 2: Tropas por tiempo</option>
           <option value="exact">Opción 3: Tropa exacta</option>
+          <option value="training">Opción 4: NPC entrenamiento tropas</option>
         </select>
       </div>
 
-      <div class="tool">
+      <div class="tool" id="toolEqOrder">
         <div class="tool-label">Orden residuo</div>
         <select id="eqOrder">
           <option value="MBHC" selected>M→B→H→C</option>
@@ -45,7 +46,7 @@
         </select>
       </div>
 
-      <div class="tool tool-wide">
+      <div class="tool tool-wide" id="toolCurTotal">
         <div class="tool-label">Recursos actuales (Total)</div>
         <input id="curTotal" type="number" min="0" value="0" placeholder="Total">
       </div>
@@ -64,6 +65,7 @@
       <button class="btn btn-orange" id="addRow" type="button">+ Añadir fila</button>
     </div>
 
+    <div id="classicNpcWrap">
     <div class="total-header">
       <div class="label-yellow">MATERIAS TOTAL</div>
     </div>
@@ -189,10 +191,79 @@
 
       <div id="exactTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
     </div>
+    </div>
+
+    <div class="mode-panel" id="modeTrainingPanel" style="display:none">
+      <div class="mode-title">Opción 4: NPC entrenamiento tropas</div>
+      <div class="training-note">
+        Pega la vista completa de <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>. Luego elige la aldea central y configura qué entrena cada aldea para calcular un tiempo objetivo común.
+      </div>
+
+      <div class="training-import-grid">
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Capacidad aldea</div>
+          <textarea id="trainingCapacityInput" class="training-textarea" placeholder="Pega aquí el bloque completo que contiene Village / Warehouse / Granary"></textarea>
+        </div>
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Los Recursos</div>
+          <textarea id="trainingResourcesInput" class="training-textarea" placeholder="Pega aquí el bloque completo que contiene Village / Madera / Barro / Hierro / Cereal / Merchants"></textarea>
+        </div>
+      </div>
+
+      <div class="training-actions">
+        <button class="btn btn-orange" id="btnImportTraining" type="button">Importar aldeas</button>
+        <div class="training-import-status" id="trainingImportStatus">Sin datos importados.</div>
+      </div>
+
+      <div class="training-central-grid">
+        <div class="train-item">
+          <div class="tool-label">Aldea central</div>
+          <select id="trainingCentralVillage"></select>
+        </div>
+        <div class="training-central-meta" id="trainingCentralMeta"></div>
+      </div>
+
+      <div class="training-summary" id="trainingSummary" style="display:none"></div>
+
+      <div class="training-table-wrap" id="trainingTableWrap" style="display:none">
+        <div class="training-table-scroll">
+          <table class="training-table">
+            <thead>
+              <tr>
+                <th class="left">Aldea</th>
+                <th>Raza</th>
+                <th>Madera</th>
+                <th>Barro</th>
+                <th>Hierro</th>
+                <th>Cereal</th>
+                <th>Almacén</th>
+                <th>Granero</th>
+                <th>Cuartel</th>
+                <th>Nv C</th>
+                <th>Establo</th>
+                <th>Nv E</th>
+                <th>Taller</th>
+                <th>Nv T</th>
+                <th>Alianza</th>
+                <th>Tropero</th>
+                <th>Casco C</th>
+                <th>Casco E</th>
+              </tr>
+            </thead>
+            <tbody id="trainingVillageBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="training-result-wrap" id="trainingResultWrap" style="display:none">
+        <div class="troop-matrix-title">Plan NPC entrenamiento tropas</div>
+        <div class="training-result-body" id="trainingResultBody"></div>
+      </div>
+    </div>
 
   </div>
 
-  <div class="subtotal-wrap">
+  <div class="subtotal-wrap" id="classicNpcSubtotal">
     <div class="subtotal-title">SUBTOTAL (PLAN)</div>
     <div class="subtotal-bar">
       <div class="hdr-blue left">Subtotal →</div>
@@ -211,7 +282,7 @@
     </div>
   </div>
 
-  <table>
+  <table id="classicNpcTable">
     <thead>
       <tr>
         <th>Tipo</th>

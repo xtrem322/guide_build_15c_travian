@@ -305,6 +305,192 @@ select,input{
 
 .exact-row{display:flex;gap:10px;align-items:center}
 
+.training-note{
+  margin-bottom:14px;
+  color:var(--muted);
+  font-weight:600;
+  line-height:1.45;
+}
+
+.training-import-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.train-item-wide{min-width:0}
+
+.training-textarea{
+  width:100%;
+  min-height:180px;
+  resize:vertical;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  color:var(--text);
+  font:inherit;
+}
+
+.training-actions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+
+.training-import-status{
+  color:var(--muted);
+  font-weight:700;
+}
+
+.training-central-grid{
+  display:grid;
+  grid-template-columns: minmax(220px, 360px) 1fr;
+  gap:12px;
+  align-items:end;
+  margin-bottom:14px;
+}
+
+.training-central-meta{
+  min-height:46px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg);
+  color:var(--muted);
+  font-weight:700;
+}
+
+.training-summary{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap:10px;
+  margin-bottom:14px;
+}
+
+.training-summary-card{
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg);
+  padding:12px;
+}
+
+.training-summary-label{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+}
+
+.training-summary-value{
+  margin-top:6px;
+  font-size:20px;
+  font-weight:900;
+}
+
+.training-table-wrap{
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--panel);
+}
+
+.training-table-scroll{overflow:auto}
+
+.training-table{
+  width:100%;
+  min-width:1600px;
+  border-collapse:separate;
+  border-spacing:0;
+  margin-top:0;
+  border:none;
+}
+
+.training-table thead th{top:0}
+.training-table tbody td{padding:8px}
+
+.training-table td.readonly{
+  background:var(--bg);
+  font-weight:700;
+}
+
+.training-table td.left{min-width:180px}
+
+.training-select,
+.training-level-select{min-width:110px}
+
+.training-level-select{min-width:74px}
+
+.training-result-wrap{
+  margin-top:14px;
+  border:2px solid var(--tm-accent);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--tm-row);
+}
+
+.training-result-body{padding:14px}
+
+.training-result-meta{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap:10px;
+  margin-bottom:14px;
+}
+
+.training-result-meta .training-summary-card{
+  background:var(--panel);
+}
+
+.training-transfer-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  border:1px solid var(--tm-border);
+  background:var(--panel);
+  margin-top:0;
+}
+
+.training-transfer-table th,
+.training-transfer-table td{
+  padding:10px 8px;
+  border-top:1px solid var(--tm-border);
+  border-right:1px solid var(--tm-border);
+  text-align:center;
+}
+
+.training-transfer-table th{
+  background:var(--tm-accent-dark);
+  color:#fff;
+  font-weight:900;
+}
+
+.training-transfer-table td.left,
+.training-transfer-table th.left{text-align:left}
+
+.training-status-ok{
+  color:var(--ok);
+  font-weight:900;
+}
+
+.training-status-warn{
+  color:var(--orange);
+  font-weight:900;
+}
+
+.training-empty{
+  color:var(--muted);
+  font-weight:700;
+}
+
 /* ─── MATRIZ DE TROPAS ───────────────────────────────────────────────── */
 
 .troop-matrix-wrap{
@@ -487,6 +673,8 @@ tbody td.left{text-align:left}
 @media (max-width:1400px){
   .train-grid{grid-template-columns: repeat(4, minmax(160px, 1fr))}
   .troop-matrix-grid{grid-template-columns: 1.8fr repeat(7, 1fr)}
+  .training-summary{grid-template-columns: repeat(2, minmax(160px, 1fr))}
+  .training-result-meta{grid-template-columns: repeat(2, minmax(150px, 1fr))}
 }
 
 @media (max-width:900px){
@@ -507,5 +695,11 @@ tbody td.left{text-align:left}
   .res-icon{
     width:16px;
     height:16px;
+  }
+  .training-import-grid,
+  .training-central-grid,
+  .training-summary,
+  .training-result-meta{
+    grid-template-columns: 1fr;
   }
 }
