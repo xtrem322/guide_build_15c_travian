@@ -187,6 +187,21 @@ function shouldStopTravianTable(line){
   return /^(Sum\b|Team_|Population:|Loyalty:|Villages\b|Village groups|Task overview|Homepage\b)/i.test(line)
 }
 
+function findTableStart(lines, type){
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i]
+    if(type === "capacity" && /^Village\s+Warehouse\s+Granary$/i.test(line)) return i + 1
+    if(type === "resources" && /^Village\s+.+\s+Merchants$/i.test(line)) return i + 1
+  }
+
+  for(let i = 0; i < lines.length; i++){
+    if(type === "capacity" && /^Capacity$/i.test(lines[i])) return i + 1
+    if(type === "resources" && /^Capacity$/i.test(lines[i])) return i + 1
+  }
+
+  return 0
+}
+
 function parseCapacityRow(line){
   const tokens = line.split(" ").filter(Boolean)
   const numericIdx = []
@@ -238,10 +253,10 @@ function parseResourcesRow(line){
   }
 }
 
-function parseTravianTable(raw, rowParser){
+function parseTravianTable(raw, rowParser, type){
   const lines = pasteLines(raw)
-  const startIdx = lines.findIndex(line => /^Capacity$/i.test(line))
-  const scoped = startIdx >= 0 ? lines.slice(startIdx + 1) : lines
+  const startIdx = findTableStart(lines, type)
+  const scoped = lines.slice(startIdx)
   const rows = []
   const seen = new Set()
 
@@ -296,8 +311,8 @@ function getTrainingCentralCandidates(){
 }
 
 function importTrainingVillages(){
-  const capacityRows = parseTravianTable($("trainingCapacityInput").value, parseCapacityRow)
-  const resourceRows = parseTravianTable($("trainingResourcesInput").value, parseResourcesRow)
+  const capacityRows = parseTravianTable($("trainingCapacityInput").value, parseCapacityRow, "capacity")
+  const resourceRows = parseTravianTable($("trainingResourcesInput").value, parseResourcesRow, "resources")
   const prevByKey = new Map(trainingVillages.map(v => [v.key, v]))
   const resourceMap = new Map(resourceRows.map(r => [r.key, r]))
   const merged = []
