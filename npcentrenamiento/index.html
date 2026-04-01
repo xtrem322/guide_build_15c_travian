@@ -29,6 +29,51 @@
           <option value="10">x10</option>
         </select>
       </div>
+      <div class="tool">
+        <div class="tool-label">% alianza</div>
+        <select id="globalAllianceBonus">
+          <option value="0">0%</option>
+          <option value="0.02">2%</option>
+          <option value="0.04">4%</option>
+          <option value="0.06">6%</option>
+          <option value="0.08">8%</option>
+          <option value="0.10">10%</option>
+        </select>
+      </div>
+      <label class="training-inline-check">
+        <input type="checkbox" id="globalTrooperEnabled">
+        <span>Tropero Grande</span>
+      </label>
+      <div class="tool" id="globalTrooperWrap" style="display:none">
+        <div class="tool-label">% tropero</div>
+        <select id="globalTrooperBoost">
+          <option value="0">0%</option>
+          <option value="0.25">25%</option>
+          <option value="0.50">50%</option>
+        </select>
+      </div>
+      <label class="training-inline-check">
+        <input type="checkbox" id="globalHelmetEnabled">
+        <span>Aplica casco a todas aldeas</span>
+      </label>
+      <div class="tool" id="globalHelmetBarracksWrap" style="display:none">
+        <div class="tool-label">Casco C</div>
+        <select id="globalHelmetBarracks">
+          <option value="0">0%</option>
+          <option value="0.10">10%</option>
+          <option value="0.15">15%</option>
+          <option value="0.20">20%</option>
+        </select>
+      </div>
+      <div class="tool" id="globalHelmetStableWrap" style="display:none">
+        <div class="tool-label">Casco E</div>
+        <select id="globalHelmetStable">
+          <option value="0">0%</option>
+          <option value="0.10">10%</option>
+          <option value="0.15">15%</option>
+          <option value="0.20">20%</option>
+        </select>
+      </div>
     </div>
 
     <div class="statusline" id="statusLine">Pega Capacidad aldea y Los Recursos para empezar.</div>
@@ -69,26 +114,7 @@
         <div class="training-table-scroll">
           <table class="training-table">
             <thead>
-              <tr>
-                <th class="left">Aldea</th>
-                <th>Raza</th>
-                <th>Madera</th>
-                <th>Barro</th>
-                <th>Hierro</th>
-                <th>Cereal</th>
-                <th>Almacen</th>
-                <th>Granero</th>
-                <th>Cuartel</th>
-                <th>Nv C</th>
-                <th>Establo</th>
-                <th>Nv E</th>
-                <th>Taller</th>
-                <th>Nv T</th>
-                <th>Alianza</th>
-                <th>Tropero</th>
-                <th>Casco C</th>
-                <th>Casco E</th>
-              </tr>
+              <tr id="trainingHeaderRow"></tr>
             </thead>
             <tbody id="trainingVillageBody"></tbody>
           </table>

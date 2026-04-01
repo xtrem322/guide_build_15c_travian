@@ -14,6 +14,14 @@ let trainingVillageId = 0
 let trainingLastImportSummary = "Sin datos importados."
 let trainingLastRenderedPlan = null
 let trainingSplitModeByVillage = {}
+const trainingGlobalConfig = {
+  allianceBonus: 0,
+  trooperEnabled: false,
+  trooperBoost: 0,
+  helmetEnabled: false,
+  helmetBarracks: 0,
+  helmetStable: 0
+}
 const TRAINING_RACE_PREFIX = {
   GA: "GALOS",
   GE: "GERMANO",
@@ -432,10 +440,10 @@ function trainingQueueConfig(village){
     lvlBarracks: village.barracksLvl,
     lvlStable: village.stableLvl,
     lvlWorkshop: village.workshopLvl,
-    allyBonus: village.allyBonus,
-    trooperBoost: village.trooperBoost,
-    helmetBarracks: village.helmetBarracks,
-    helmetStable: village.helmetStable
+    allyBonus: trainingGlobalConfig.allianceBonus,
+    trooperBoost: trainingGlobalConfig.trooperEnabled ? trainingGlobalConfig.trooperBoost : village.trooperBoost,
+    helmetBarracks: trainingGlobalConfig.helmetEnabled ? trainingGlobalConfig.helmetBarracks : village.helmetBarracks,
+    helmetStable: trainingGlobalConfig.helmetEnabled ? trainingGlobalConfig.helmetStable : village.helmetStable
   }
 }
 
@@ -668,6 +676,51 @@ function renderSelectControl(options, value, onChange, className){
   return sel
 }
 
+function refreshGlobalTrainingControls(){
+  $("globalTrooperWrap").style.display = trainingGlobalConfig.trooperEnabled ? "" : "none"
+  $("globalHelmetBarracksWrap").style.display = trainingGlobalConfig.helmetEnabled ? "" : "none"
+  $("globalHelmetStableWrap").style.display = trainingGlobalConfig.helmetEnabled ? "" : "none"
+}
+
+function syncGlobalTrainingConfigFromDom(){
+  trainingGlobalConfig.allianceBonus = Number($("globalAllianceBonus")?.value || 0)
+  trainingGlobalConfig.trooperEnabled = Boolean($("globalTrooperEnabled")?.checked)
+  trainingGlobalConfig.trooperBoost = Number($("globalTrooperBoost")?.value || 0)
+  trainingGlobalConfig.helmetEnabled = Boolean($("globalHelmetEnabled")?.checked)
+  trainingGlobalConfig.helmetBarracks = Number($("globalHelmetBarracks")?.value || 0)
+  trainingGlobalConfig.helmetStable = Number($("globalHelmetStable")?.value || 0)
+}
+
+function renderTrainingHeader(){
+  const row = $("trainingHeaderRow")
+  if(!row) return
+
+  const headers = [
+    { label:"Aldea", left:true },
+    { label:"Raza" },
+    { label:"Madera" },
+    { label:"Barro" },
+    { label:"Hierro" },
+    { label:"Cereal" },
+    { label:"Almacen" },
+    { label:"Granero" },
+    { label:"Cuartel" },
+    { label:"Nv C" },
+    { label:"Establo" },
+    { label:"Nv E" },
+    { label:"Taller" },
+    { label:"Nv T" }
+  ]
+
+  if(!trainingGlobalConfig.trooperEnabled) headers.push({ label:"Tropero" })
+  if(!trainingGlobalConfig.helmetEnabled){
+    headers.push({ label:"Casco C" })
+    headers.push({ label:"Casco E" })
+  }
+
+  row.innerHTML = headers.map(item => `<th${item.left ? ' class="left"' : ""}>${item.label}</th>`).join("")
+}
+
 function updateTrainingCentralSelect(){
   const sel = $("trainingCentralVillage")
   const candidates = getTrainingCentralCandidates()
@@ -696,6 +749,7 @@ function renderTrainingVillageTable(){
   const body = $("trainingVillageBody")
   const wrap = $("trainingTableWrap")
   body.innerHTML = ""
+  renderTrainingHeader()
   const activeVillages = getEffectiveTrainingVillages()
 
   if(!activeVillages.length){
@@ -705,10 +759,6 @@ function renderTrainingVillageTable(){
 
   wrap.style.display = "block"
 
-  const allyOpts = [
-    { value:"0", label:"0%" }, { value:"0.02", label:"2%" }, { value:"0.04", label:"4%" },
-    { value:"0.06", label:"6%" }, { value:"0.08", label:"8%" }, { value:"0.10", label:"10%" }
-  ]
   const trooperOpts = [
     { value:"0", label:"0%" }, { value:"0.25", label:"25%" }, { value:"0.50", label:"50%" }
   ]
@@ -760,12 +810,17 @@ function renderTrainingVillageTable(){
       { options: stableOptions, value: village.stableTroop, onChange: (next) => { village.stableTroop = next; recalc() }, className: "training-select" },
       { options: levelOpts, value: String(village.stableLvl), onChange: (next) => { village.stableLvl = Math.max(1, Math.floor(n0(next))); recalc() }, className: "training-level-select" },
       { options: workshopOptions, value: village.workshopTroop, onChange: (next) => { village.workshopTroop = next; recalc() }, className: "training-select" },
-      { options: levelOpts, value: String(village.workshopLvl), onChange: (next) => { village.workshopLvl = Math.max(1, Math.floor(n0(next))); recalc() }, className: "training-level-select" },
-      { options: allyOpts, value: String(village.allyBonus), onChange: (next) => { village.allyBonus = Number(next); recalc() }, className: "training-level-select" },
-      { options: trooperOpts, value: String(village.trooperBoost), onChange: (next) => { village.trooperBoost = Number(next); recalc() }, className: "training-level-select" },
-      { options: helmetOpts, value: String(village.helmetBarracks), onChange: (next) => { village.helmetBarracks = Number(next); recalc() }, className: "training-level-select" },
-      { options: helmetOpts, value: String(village.helmetStable), onChange: (next) => { village.helmetStable = Number(next); recalc() }, className: "training-level-select" }
+      { options: levelOpts, value: String(village.workshopLvl), onChange: (next) => { village.workshopLvl = Math.max(1, Math.floor(n0(next))); recalc() }, className: "training-level-select" }
     ]
+
+    if(!trainingGlobalConfig.trooperEnabled){
+      controls.push({ options: trooperOpts, value: String(village.trooperBoost), onChange: (next) => { village.trooperBoost = Number(next); recalc() }, className: "training-level-select" })
+    }
+
+    if(!trainingGlobalConfig.helmetEnabled){
+      controls.push({ options: helmetOpts, value: String(village.helmetBarracks), onChange: (next) => { village.helmetBarracks = Number(next); recalc() }, className: "training-level-select" })
+      controls.push({ options: helmetOpts, value: String(village.helmetStable), onChange: (next) => { village.helmetStable = Number(next); recalc() }, className: "training-level-select" })
+    }
 
     for(const control of controls){
       const td = document.createElement("td")
@@ -981,6 +1036,28 @@ function queueCountLabelWithSplit(counts, factor){
   return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
 }
 
+function queueCountLabel(counts){
+  const active = counts.filter(item => item.units > 0)
+  if(!active.length) return "-"
+  return active.map(item => {
+    const troopName = String(item.troopName || "").trim()
+    return troopName ? `${item.label}: ${troopName} ${fmtInt(item.units)}` : `${item.label}:${fmtInt(item.units)}`
+  }).join(" · ")
+}
+
+function queueCountLabelWithSplit(counts, factor){
+  const active = counts.filter(item => item.units > 0)
+  if(!active.length) return "-"
+  const formatItem = (item, units) => {
+    const troopName = String(item.troopName || "").trim()
+    return troopName ? `${item.label}: ${troopName} ${fmtInt(units)}` : `${item.label}:${fmtInt(units)}`
+  }
+  const main = active.map(item => formatItem(item, item.units)).join(" · ")
+  if(factor <= 1) return main
+  const split = active.map(item => formatItem(item, splitAmount(item.units, factor))).join(" · ")
+  return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
+}
+
 function recalc(){
   updateTrainingCentralSelect()
   renderTrainingVillageTable()
@@ -1036,7 +1113,36 @@ async function loadCatalogs(){
 async function init(){
   await loadCatalogs()
 
+  syncGlobalTrainingConfigFromDom()
+  refreshGlobalTrainingControls()
+
   $("serverSpeed").addEventListener("change", recalc)
+  $("globalAllianceBonus").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
+  $("globalTrooperEnabled").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    refreshGlobalTrainingControls()
+    recalc()
+  })
+  $("globalTrooperBoost").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
+  $("globalHelmetEnabled").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    refreshGlobalTrainingControls()
+    recalc()
+  })
+  $("globalHelmetBarracks").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
+  $("globalHelmetStable").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
   $("btnImportTraining").addEventListener("click", () => {
     const info = importTrainingVillages()
     if(info.mergedCount > 0){

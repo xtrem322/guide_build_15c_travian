@@ -628,6 +628,81 @@ def test_npc_training_split_buttons(driver, base_url):
     assert len(active_after_3) == 1 and len(inactive_2) == 0, "Entre 3 no reemplazo correctamente al boton activo"
 
 
+def test_npc_training_global_modifiers(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
+    )
+
+    headers_before = [cell.text.strip() for cell in driver.find_elements(By.CSS_SELECTOR, "#trainingHeaderRow th")]
+    assert "Alianza" not in headers_before, "La alianza debe estar solo como configuracion global"
+    assert "Tropero" in headers_before, "Tropero debe seguir local mientras no se active el modo global"
+    assert "Casco C" in headers_before and "Casco E" in headers_before, "Los cascos deben seguir locales mientras no se active el modo global"
+
+    assert not driver.find_element(By.ID, "globalTrooperWrap").is_displayed(), "El selector global de tropero no debe mostrarse antes del check"
+    assert not driver.find_element(By.ID, "globalHelmetBarracksWrap").is_displayed(), "El casco global no debe mostrarse antes del check"
+    assert not driver.find_element(By.ID, "globalHelmetStableWrap").is_displayed(), "El casco global no debe mostrarse antes del check"
+
+    driver.find_element(By.ID, "globalTrooperEnabled").click()
+    driver.find_element(By.ID, "globalHelmetEnabled").click()
+
+    WebDriverWait(driver, 10).until(lambda d: d.find_element(By.ID, "globalTrooperWrap").is_displayed())
+    WebDriverWait(driver, 10).until(lambda d: d.find_element(By.ID, "globalHelmetBarracksWrap").is_displayed())
+    WebDriverWait(driver, 10).until(lambda d: d.find_element(By.ID, "globalHelmetStableWrap").is_displayed())
+
+    headers_after = [cell.text.strip() for cell in driver.find_elements(By.CSS_SELECTOR, "#trainingHeaderRow th")]
+    assert "Tropero" not in headers_after, "Tropero no salio de la matriz al activar el modo global"
+    assert "Casco C" not in headers_after and "Casco E" not in headers_after, "Los cascos no salieron de la matriz al activar el modo global"
+
+
+def test_npc_training_queue_names(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        """
+        trainingSplitModeByVillage = {};
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: [{
+            village: { key: "villa-a", name: "Villa A" },
+            status: "NPC",
+            currentTime: 0,
+            counts: [{ label:"C", troopName:"Imperiano", units:341 }, { label:"E", troopName:"Equites Imperatoris", units:57 }],
+            deficit: withResourceTotal({ wood: 64618, clay: 65521, iron: 83615, crop: 27932 })
+          }]
+        });
+        """
+    )
+
+    queue_cell = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)")
+    assert "C: Imperiano 341" in queue_cell.text, "La columna Colas no mostro el nombre de la unidad del cuartel"
+    assert "E: Equites Imperatoris 57" in queue_cell.text, "La columna Colas no mostro el nombre de la unidad del establo"
+
+    driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
+    WebDriverWait(driver, 5).until(lambda d: "x2:" in d.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)").text)
+    split_text = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)").text
+    assert "x2: C: Imperiano 171" in split_text, "Entre 2 no mantuvo el nombre de unidad en la segunda linea"
+
+
 def main():
     try:
         driver = build_driver()
@@ -653,6 +728,8 @@ def main():
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
+                ("npc_training_global_modifiers", test_npc_training_global_modifiers),
+                ("npc_training_queue_names", test_npc_training_queue_names),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),
