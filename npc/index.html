@@ -3,17 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; frame-ancestors 'none'">
-
 <title>NPC Optimizador</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 
 <div class="wrap">
-
   <div class="sticky-top">
     <div id="nav"></div>
     <script src="../nav.js" defer></script>
@@ -30,19 +27,18 @@
       <div class="tool">
         <div class="tool-label">Excedente</div>
         <select id="excessMode">
-          <option value="eq">Opción 1: Equitativo</option>
-          <option value="time">Opción 2: Tropas por tiempo</option>
-          <option value="exact">Opción 3: Tropa exacta</option>
-          <option value="training">Opción 4: NPC entrenamiento tropas</option>
+          <option value="eq">Opcion 1: Equitativo</option>
+          <option value="time">Opcion 2: Tropas por tiempo</option>
+          <option value="exact">Opcion 3: Tropa exacta</option>
         </select>
       </div>
 
       <div class="tool" id="toolEqOrder">
         <div class="tool-label">Orden residuo</div>
         <select id="eqOrder">
-          <option value="MBHC" selected>M→B→H→C</option>
-          <option value="CBHM">C→B→H→M</option>
-          <option value="MCHB">M→C→H→B</option>
+          <option value="MBHC" selected>M-&gt;B-&gt;H-&gt;C</option>
+          <option value="CBHM">C-&gt;B-&gt;H-&gt;M</option>
+          <option value="MCHB">M-&gt;C-&gt;H-&gt;B</option>
         </select>
       </div>
 
@@ -62,211 +58,148 @@
         </select>
       </div>
 
-      <button class="btn btn-orange" id="addRow" type="button">+ Añadir fila</button>
+      <button class="btn btn-orange" id="addRow" type="button">+ Anadir fila</button>
     </div>
 
     <div id="classicNpcWrap">
-    <div class="total-header">
-      <div class="label-yellow">MATERIAS TOTAL</div>
-    </div>
-
-    <div class="copy-bar">
-      <div></div>
-      <button class="copy-head copy-wood" id="copyWood" type="button" data-copy-key="wood" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Copiar</span></span>
-      </button>
-      <button class="copy-head copy-clay" id="copyClay" type="button" data-copy-key="clay" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Copiar</span></span>
-      </button>
-      <button class="copy-head copy-iron" id="copyIron" type="button" data-copy-key="iron" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Copiar</span></span>
-      </button>
-      <button class="copy-head copy-crop" id="copyCrop" type="button" data-copy-key="crop" hidden>
-        <span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Copiar</span></span>
-      </button>
-      <div></div>
-    </div>
-
-    <div class="total-bar">
-      <div class="hdr-blue left">TOTAL REPARTIR →</div>
-      <div class="hdr-blue">Madera</div>
-      <div class="hdr-blue">Barro</div>
-      <div class="hdr-blue">Hierro</div>
-      <div class="hdr-blue">Cereal</div>
-      <div class="hdr-blue">Total</div>
-
-      <div class="cell-yellow left muted">Objetivo post-NPC</div>
-      <div class="cell-yellow" id="tgtWood">0</div>
-      <div class="cell-yellow" id="tgtClay">0</div>
-      <div class="cell-yellow" id="tgtIron">0</div>
-      <div class="cell-yellow" id="tgtCrop">0</div>
-      <div class="cell-total" id="tgtAll">0</div>
-    </div>
-
-    <div class="statusline" id="statusLine"></div>
-
-    <div class="mode-panel" id="modeTimePanel" style="display:none">
-      <div class="mode-title">Opción 2: Tropas por tiempo (excedente)</div>
-
-      <div class="train-grid">
-        <div class="train-item">
-          <div class="tool-label">Nivel Cuartel</div>
-          <select id="lvlBarracks"></select>
-        </div>
-        <div class="train-item">
-          <div class="tool-label">Nivel Establo</div>
-          <select id="lvlStable"></select>
-        </div>
-        <div class="train-item">
-          <div class="tool-label">Nivel Taller</div>
-          <select id="lvlWorkshop"></select>
-        </div>
-
-        <div class="train-item">
-          <div class="tool-label">Bono alianza</div>
-          <select id="allyBonus">
-            <option value="0" selected>0%</option>
-            <option value="0.02">2%</option>
-            <option value="0.04">4%</option>
-            <option value="0.06">6%</option>
-            <option value="0.08">8%</option>
-            <option value="0.10">10%</option>
-          </select>
-        </div>
-
-        <div class="train-item">
-          <div class="tool-label">Tropero</div>
-          <select id="trooperBoost">
-            <option value="0" selected>Ninguno</option>
-            <option value="0.25">25%</option>
-            <option value="0.50">50%</option>
-          </select>
-        </div>
-
-        <div class="train-item">
-          <div class="tool-label">Casco Cuartel</div>
-          <select id="helmetBarracks">
-            <option value="0" selected>Ninguno</option>
-            <option value="0.10">10%</option>
-            <option value="0.15">15%</option>
-            <option value="0.20">20%</option>
-          </select>
-        </div>
-
-        <div class="train-item">
-          <div class="tool-label">Casco Caballería</div>
-          <select id="helmetStable">
-            <option value="0" selected>Ninguno</option>
-            <option value="0.10">10%</option>
-            <option value="0.15">15%</option>
-            <option value="0.20">20%</option>
-          </select>
-        </div>
-
+      <div class="total-header">
+        <div class="label-yellow">MATERIAS TOTAL</div>
       </div>
 
-      <div class="queues">
-        <div class="qbox">
-          <label class="qcheck"><input id="qBarracksOn" type="checkbox" checked> Cuartel (C)</label>
-          <select id="qBarracksTroop"></select>
-        </div>
-        <div class="qbox">
-          <label class="qcheck"><input id="qStableOn" type="checkbox" checked> Establo (E)</label>
-          <select id="qStableTroop"></select>
-        </div>
-        <div class="qbox">
-          <label class="qcheck"><input id="qWorkshopOn" type="checkbox"> Taller (T)</label>
-          <select id="qWorkshopTroop"></select>
-        </div>
+      <div class="copy-bar">
+        <div></div>
+        <button class="copy-head copy-wood" id="copyWood" type="button" data-copy-key="wood" hidden>
+          <span class="res-label"><img class="res-icon" src="./icons/wood.svg" alt=""><span>Copiar</span></span>
+        </button>
+        <button class="copy-head copy-clay" id="copyClay" type="button" data-copy-key="clay" hidden>
+          <span class="res-label"><img class="res-icon" src="./icons/clay.svg" alt=""><span>Copiar</span></span>
+        </button>
+        <button class="copy-head copy-iron" id="copyIron" type="button" data-copy-key="iron" hidden>
+          <span class="res-label"><img class="res-icon" src="./icons/iron.svg" alt=""><span>Copiar</span></span>
+        </button>
+        <button class="copy-head copy-crop" id="copyCrop" type="button" data-copy-key="crop" hidden>
+          <span class="res-label"><img class="res-icon" src="./icons/crop.svg" alt=""><span>Copiar</span></span>
+        </button>
+        <div></div>
       </div>
 
-      <div id="timeTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
-    </div>
+      <div class="total-bar">
+        <div class="hdr-blue left">TOTAL REPARTIR -&gt;</div>
+        <div class="hdr-blue">Madera</div>
+        <div class="hdr-blue">Barro</div>
+        <div class="hdr-blue">Hierro</div>
+        <div class="hdr-blue">Cereal</div>
+        <div class="hdr-blue">Total</div>
 
-    <div class="mode-panel" id="modeExactPanel" style="display:none">
-      <div class="mode-title">Opción 3: Tropa exacta (excedente)</div>
-      <div class="exact-row">
-        <select id="exactTroop"></select>
+        <div class="cell-yellow left muted">Objetivo post-NPC</div>
+        <div class="cell-yellow" id="tgtWood">0</div>
+        <div class="cell-yellow" id="tgtClay">0</div>
+        <div class="cell-yellow" id="tgtIron">0</div>
+        <div class="cell-yellow" id="tgtCrop">0</div>
+        <div class="cell-total" id="tgtAll">0</div>
       </div>
 
-      <div id="exactTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
-    </div>
+      <div class="statusline" id="statusLine"></div>
+
+      <div class="mode-panel" id="modeTimePanel" style="display:none">
+        <div class="mode-title">Opcion 2: Tropas por tiempo (excedente)</div>
+
+        <div class="train-grid">
+          <div class="train-item">
+            <div class="tool-label">Nivel Cuartel</div>
+            <select id="lvlBarracks"></select>
+          </div>
+          <div class="train-item">
+            <div class="tool-label">Nivel Establo</div>
+            <select id="lvlStable"></select>
+          </div>
+          <div class="train-item">
+            <div class="tool-label">Nivel Taller</div>
+            <select id="lvlWorkshop"></select>
+          </div>
+
+          <div class="train-item">
+            <div class="tool-label">Bono alianza</div>
+            <select id="allyBonus">
+              <option value="0" selected>0%</option>
+              <option value="0.02">2%</option>
+              <option value="0.04">4%</option>
+              <option value="0.06">6%</option>
+              <option value="0.08">8%</option>
+              <option value="0.10">10%</option>
+            </select>
+          </div>
+
+          <div class="train-item">
+            <div class="tool-label">Tropero</div>
+            <select id="trooperBoost">
+              <option value="0" selected>Ninguno</option>
+              <option value="0.25">25%</option>
+              <option value="0.50">50%</option>
+            </select>
+          </div>
+
+          <div class="train-item">
+            <div class="tool-label">Casco Cuartel</div>
+            <select id="helmetBarracks">
+              <option value="0" selected>Ninguno</option>
+              <option value="0.10">10%</option>
+              <option value="0.15">15%</option>
+              <option value="0.20">20%</option>
+            </select>
+          </div>
+
+          <div class="train-item">
+            <div class="tool-label">Casco Caballeria</div>
+            <select id="helmetStable">
+              <option value="0" selected>Ninguno</option>
+              <option value="0.10">10%</option>
+              <option value="0.15">15%</option>
+              <option value="0.20">20%</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="queues">
+          <div class="qbox">
+            <label class="qcheck"><input id="qBarracksOn" type="checkbox" checked> Cuartel (C)</label>
+            <select id="qBarracksTroop"></select>
+          </div>
+          <div class="qbox">
+            <label class="qcheck"><input id="qStableOn" type="checkbox" checked> Establo (E)</label>
+            <select id="qStableTroop"></select>
+          </div>
+          <div class="qbox">
+            <label class="qcheck"><input id="qWorkshopOn" type="checkbox"> Taller (T)</label>
+            <select id="qWorkshopTroop"></select>
+          </div>
+        </div>
+
+        <div id="timeTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
+      </div>
+
+      <div class="mode-panel" id="modeExactPanel" style="display:none">
+        <div class="mode-title">Opcion 3: Tropa exacta (excedente)</div>
+        <div class="exact-row">
+          <select id="exactTroop"></select>
+        </div>
+
+        <div id="exactTroopMatrix" class="troop-matrix-wrap" style="display:none"></div>
+      </div>
     </div>
 
     <div class="mode-panel" id="modeTrainingPanel" style="display:none">
-      <div class="mode-title">Opción 4: NPC entrenamiento tropas</div>
+      <div class="mode-title">NPC entrenamiento tropas</div>
       <div class="training-note">
-        Pega la vista completa de <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>. Luego elige la aldea central y configura qué entrena cada aldea para calcular un tiempo objetivo común.
-      </div>
-
-      <div class="training-import-grid">
-        <div class="train-item train-item-wide">
-          <div class="tool-label">Pegado: Capacidad aldea</div>
-          <textarea id="trainingCapacityInput" class="training-textarea" placeholder="Pega aquí el bloque completo que contiene Village / Warehouse / Granary"></textarea>
-        </div>
-        <div class="train-item train-item-wide">
-          <div class="tool-label">Pegado: Los Recursos</div>
-          <textarea id="trainingResourcesInput" class="training-textarea" placeholder="Pega aquí el bloque completo que contiene Village / Madera / Barro / Hierro / Cereal / Merchants"></textarea>
-        </div>
-      </div>
-
-      <div class="training-actions">
-        <button class="btn btn-orange" id="btnImportTraining" type="button">Importar aldeas</button>
-        <div class="training-import-status" id="trainingImportStatus">Sin datos importados.</div>
-      </div>
-
-      <div class="training-central-grid">
-        <div class="train-item">
-          <div class="tool-label">Aldea central</div>
-          <select id="trainingCentralVillage"></select>
-        </div>
-        <div class="training-central-meta" id="trainingCentralMeta"></div>
-      </div>
-
-      <div class="training-summary" id="trainingSummary" style="display:none"></div>
-
-      <div class="training-table-wrap" id="trainingTableWrap" style="display:none">
-        <div class="training-table-scroll">
-          <table class="training-table">
-            <thead>
-              <tr>
-                <th class="left">Aldea</th>
-                <th>Raza</th>
-                <th>Madera</th>
-                <th>Barro</th>
-                <th>Hierro</th>
-                <th>Cereal</th>
-                <th>Almacén</th>
-                <th>Granero</th>
-                <th>Cuartel</th>
-                <th>Nv C</th>
-                <th>Establo</th>
-                <th>Nv E</th>
-                <th>Taller</th>
-                <th>Nv T</th>
-                <th>Alianza</th>
-                <th>Tropero</th>
-                <th>Casco C</th>
-                <th>Casco E</th>
-              </tr>
-            </thead>
-            <tbody id="trainingVillageBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="training-result-wrap" id="trainingResultWrap" style="display:none">
-        <div class="troop-matrix-title">Plan NPC entrenamiento tropas</div>
-        <div class="training-result-body" id="trainingResultBody"></div>
+        Esta vista se movio a la herramienta independiente del menu superior.
       </div>
     </div>
-
   </div>
 
   <div class="subtotal-wrap" id="classicNpcSubtotal">
     <div class="subtotal-title">SUBTOTAL (PLAN)</div>
     <div class="subtotal-bar">
-      <div class="hdr-blue left">Subtotal →</div>
+      <div class="hdr-blue left">Subtotal -&gt;</div>
       <div class="hdr-blue">Madera</div>
       <div class="hdr-blue">Barro</div>
       <div class="hdr-blue">Hierro</div>
@@ -300,7 +233,6 @@
     </thead>
     <tbody id="rows"></tbody>
   </table>
-
 </div>
 
 <script src="./app.js" defer></script>

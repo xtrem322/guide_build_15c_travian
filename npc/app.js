@@ -1564,19 +1564,25 @@ async function init(){
   $("excessMode").addEventListener("change", recalc)
   $("eqOrder").addEventListener("change",    recalc)
   $("curTotal").addEventListener("input",    recalc)
-  $("btnImportTraining").addEventListener("click", () => {
-    const info = importTrainingVillages()
-    if(info.mergedCount > 0){
-      $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce válido: ${fmtInt(info.mergedCount)}`
-    } else {
-      $("trainingImportStatus").textContent = "No se encontraron aldeas válidas al cruzar ambos pegados."
-    }
-    recalc()
-  })
-  $("trainingCentralVillage").addEventListener("change", () => {
-    trainingCentralKey = $("trainingCentralVillage").value || ""
-    recalc()
-  })
+  const importBtn = $("btnImportTraining")
+  if(importBtn){
+    importBtn.addEventListener("click", () => {
+      const info = importTrainingVillages()
+      if(info.mergedCount > 0){
+        $("trainingImportStatus").textContent = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce válido: ${fmtInt(info.mergedCount)}`
+      } else {
+        $("trainingImportStatus").textContent = "No se encontraron aldeas válidas al cruzar ambos pegados."
+      }
+      recalc()
+    })
+  }
+  const centralVillageSel = $("trainingCentralVillage")
+  if(centralVillageSel){
+    centralVillageSel.addEventListener("change", () => {
+      trainingCentralKey = $("trainingCentralVillage").value || ""
+      recalc()
+    })
+  }
   $("copyWood").addEventListener("click", copyNpcValue)
   $("copyClay").addEventListener("click", copyNpcValue)
   $("copyIron").addEventListener("click", copyNpcValue)
