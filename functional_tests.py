@@ -17,6 +17,95 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+CAPACITY_EXAMPLE = """Privacy settings
+4
+‭3,201‬
+‭2,031‬
+‭80,000‬
+‭20,835‬
+‭22,648‬
+‭14,339‬
+‭66,400‬
+‭12,118‬
+‭5,630‬
+Switch to avatar for sitting
+Hero
+Server time:  19:58:59
+Alliance banner
+SAQ 1
+Info box
+‭‭1‬×‬
+
+    del
+    Find out all details about the upcoming Easter truce in our article.
+
+Link list
+
+    Lista de Vacas
+    LEER COSAS POR HACER
+    Tropas en aldea
+    Tiempo entrenamiento tropas
+
+Village overview
+Overview
+Resources
+Culture points
+Troops
+
+Resources
+
+Warehouse
+
+Production
+
+Capacity
+Village \tWarehouse \tGranary
+Villa Zero \t‭45,700‬ \t‭55,100‬
+FO001 \t‭80,000‬ \t‭80,000‬
+FO002 \t‭80,000‬ \t‭66,400‬
+Villa Pokemon \t‭240,000‬ \t‭480,000‬
+Villa Tormento \t‭400,000‬ \t‭880,000‬
+Villa Esperanza \t‭125,700‬ \t‭160,000‬
+Villa Emoción \t‭85,000‬ \t‭125,700‬
+Villa Charizard \t‭80,000‬ \t‭80,000‬
+Ojitos Rojos \t‭45,700‬ \t‭21,400‬
+Sum \t‭1,182,100‬ \t‭1,948,600‬
+Team_Tocabolus
+Population: ‭670‬
+Loyalty: ‭‭100‬%‬
+Villages ‭‭9‬/‭9‬‬
+
+Village groups(‭‭5‬/‭20‬‬)
+Zona Inicial
+Villa Zero
+‭(‭25‬|‭−‭53‬‬)‬
+FO001
+‭(‭23‬|‭−‭64‬‬)‬
+FO002
+‭(‭17‬|‭−‭89‬‬)‬
+Capital
+Villa Pokemon
+‭(‭83‬|‭−‭166‬‬)‬
+Gasolinera
+Villa Tormento
+‭(‭84‬|‭−‭165‬‬)‬
+Aldeas OFF
+Villa Esperanza
+‭(‭84‬|‭−‭166‬‬)‬
+Aldeas DEFF
+Villa Emoción
+‭(‭84‬|‭−‭164‬‬)‬
+Villa Charizard
+‭(‭83‬|‭−‭168‬‬)‬
+Ojitos Rojos
+‭(‭81‬|‭−‭168‬‬)‬
+Task overview
+Homepage Discord News Support Game rules Terms Imprint
+
+© 2004 - 2026 Travian Games GmbH
+"""
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -47,12 +136,16 @@ def build_driver():
     )
 
     options = Options()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")
     options.add_argument("--window-size=1440,1200")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--remote-debugging-port=0")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--no-first-run")
+    options.add_argument("--remote-debugging-pipe")
 
     driver_candidates = [
         os.environ.get("CHROMEDRIVER"),
@@ -105,7 +198,7 @@ def assert_theme_toggle(driver):
 
 
 def test_theme_toggle(driver, base_url):
-    paths = ["/roi/", "/npc/", "/oasis/", "/listadevacas/", "/cultura/"]
+    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/oasis/", "/listadevacas/", "/cultura/"]
     for path in paths:
         driver.get(f"{base_url}{path}")
         assert_theme_toggle(driver)
@@ -191,6 +284,26 @@ def test_cultura(driver, base_url):
     assert driver.find_elements(By.CSS_SELECTOR, "#resultTableBody .rc-qty"), "Cultura no mostro la columna de cantidad"
 
 
+def test_npc_training_capacity_parser(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    rows = driver.execute_script(
+        "return parseTravianTable(arguments[0], parseCapacityRow, 'capacity');",
+        CAPACITY_EXAMPLE
+    )
+
+    assert len(rows) == 9, f"Se esperaban 9 aldeas en capacidad y llegaron {len(rows)}"
+
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["Villa Zero"]["warehouseCap"] == 45700, "Villa Zero no parseo almacen"
+    assert by_name["Villa Zero"]["granaryCap"] == 55100, "Villa Zero no parseo granero"
+    assert by_name["FO002"]["warehouseCap"] == 80000, "FO002 no parseo almacen"
+    assert by_name["FO002"]["granaryCap"] == 66400, "FO002 no parseo granero"
+    assert by_name["Villa Tormento"]["warehouseCap"] == 400000, "Villa Tormento no parseo almacen"
+    assert by_name["Villa Tormento"]["granaryCap"] == 880000, "Villa Tormento no parseo granero"
+
+
 def main():
     try:
         driver = build_driver()
@@ -208,10 +321,18 @@ def main():
                 ("theme", test_theme_toggle),
                 ("roi", test_roi),
                 ("npc", test_npc),
+                ("npc_training_capacity_parser", test_npc_training_capacity_parser),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),
             ]
+            selected = {
+                item.strip()
+                for item in os.environ.get("TEST_FILTER", "").split(",")
+                if item.strip()
+            }
+            if selected:
+                tests = [(name, fn) for name, fn in tests if name in selected]
             for name, fn in tests:
                 try:
                     fn(driver, base_url)
