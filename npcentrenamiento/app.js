@@ -847,7 +847,24 @@ function renderTrainingResult(plan){
     <div class="training-result-meta">
       <div class="training-summary-card">
         <div class="training-summary-label">NPC central</div>
-        <div class="training-summary-value">${fmtInt(plan.totalTransfer.wood)} / ${fmtInt(plan.totalTransfer.clay)} / ${fmtInt(plan.totalTransfer.iron)} / ${fmtInt(plan.totalTransfer.crop)}</div>
+        <div class="npc-central-grid">
+          <div class="npc-central-item">
+            <div class="npc-central-label">Madera</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.wood)}</div>
+          </div>
+          <div class="npc-central-item">
+            <div class="npc-central-label">Barro</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.clay)}</div>
+          </div>
+          <div class="npc-central-item">
+            <div class="npc-central-label">Hierro</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.iron)}</div>
+          </div>
+          <div class="npc-central-item">
+            <div class="npc-central-label">Cereal</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.crop)}</div>
+          </div>
+        </div>
       </div>
     </div>
     <table class="training-transfer-table">

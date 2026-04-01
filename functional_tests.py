@@ -557,6 +557,33 @@ def test_npc_training_central_total_and_village_transfers(driver, base_url):
     assert {item["status"] for item in result["statuses"]} == {"Envio", "NPC"}, "NPC entrenamiento no distinguio entre apoyo entre aldeas y NPC central"
 
 
+def test_npc_training_npc_central_boxes(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 323401, clay: 244262, iron: 215471, crop: 54486 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: []
+        });
+        return {
+          labels: [...document.querySelectorAll('.npc-central-label')].map(x => x.textContent.trim()),
+          values: [...document.querySelectorAll('.npc-central-value')].map(x => x.textContent.trim())
+        };
+        """
+    )
+
+    assert result["labels"] == ["Madera", "Barro", "Hierro", "Cereal"], "NPC central no mostro los cuatro cuadros etiquetados"
+    assert result["values"] == ["323401", "244262", "215471", "54486"], "NPC central no mostro los valores en los cuadros correctos"
+
+
 def main():
     try:
         driver = build_driver()
@@ -580,6 +607,7 @@ def main():
                 ("npc_training_resources_parser", test_npc_training_resources_parser),
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
+                ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

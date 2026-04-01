@@ -450,6 +450,34 @@ select,input{
   background:var(--panel);
 }
 
+.npc-central-grid{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap:8px;
+  margin-top:8px;
+}
+
+.npc-central-item{
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg);
+  padding:10px;
+}
+
+.npc-central-label{
+  color:var(--muted);
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+}
+
+.npc-central-value{
+  margin-top:6px;
+  font-size:18px;
+  font-weight:900;
+}
+
 .training-transfer-table{
   width:100%;
   border-collapse:separate;
@@ -701,5 +729,8 @@ tbody td.left{text-align:left}
   .training-summary,
   .training-result-meta{
     grid-template-columns: 1fr;
+  }
+  .npc-central-grid{
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 }
