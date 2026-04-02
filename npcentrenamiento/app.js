@@ -930,7 +930,6 @@ function renderTrainingResult(plan){
         <tr>
           <th class="left">Aldea</th>
           <th>Estado</th>
-          <th title="Tiempo que la aldea ya sostiene con sus recursos actuales antes de NPC y envios">Tiempo actual</th>
           <th>Tiempo objetivo</th>
           <th>Colas</th>
           <th>${renderResourceLabel("wood")}</th>
@@ -946,7 +945,6 @@ function renderTrainingResult(plan){
             <tr>
               <td class="left">${item.village.name}</td>
               <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
-              <td>${fmtTime(item.currentTime)}</td>
               <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
               <td>
                 <div class="split-cell-main">${queueCountLabelWithSplit(item.counts, splitFactor)}</div>
