@@ -902,24 +902,24 @@ function renderTrainingResult(plan){
         <div class="training-summary-value">${fmtInt(centralRemainingTotal)}</div>
       </div>
     </div>
-    <div class="training-result-meta">
-      <div class="training-summary-card">
+    <div class="training-result-meta training-result-meta-wide">
+      <div class="training-summary-card training-summary-card-wide">
         <div class="training-summary-label">NPC central</div>
         <div class="npc-central-grid">
-          <div class="npc-central-item">
-            <div class="npc-central-label">Madera</div>
+          <div class="npc-central-item resource-wood">
+            <div class="npc-central-label">${renderResourceLabel("wood")}</div>
             <div class="npc-central-value">${fmtInt(plan.totalTransfer.wood)}</div>
           </div>
-          <div class="npc-central-item">
-            <div class="npc-central-label">Barro</div>
+          <div class="npc-central-item resource-clay">
+            <div class="npc-central-label">${renderResourceLabel("clay")}</div>
             <div class="npc-central-value">${fmtInt(plan.totalTransfer.clay)}</div>
           </div>
-          <div class="npc-central-item">
-            <div class="npc-central-label">Hierro</div>
+          <div class="npc-central-item resource-iron">
+            <div class="npc-central-label">${renderResourceLabel("iron")}</div>
             <div class="npc-central-value">${fmtInt(plan.totalTransfer.iron)}</div>
           </div>
-          <div class="npc-central-item">
-            <div class="npc-central-label">Cereal</div>
+          <div class="npc-central-item resource-crop">
+            <div class="npc-central-label">${renderResourceLabel("crop")}</div>
             <div class="npc-central-value">${fmtInt(plan.totalTransfer.crop)}</div>
           </div>
         </div>
@@ -930,13 +930,13 @@ function renderTrainingResult(plan){
         <tr>
           <th class="left">Aldea</th>
           <th>Estado</th>
-          <th>Tiempo actual</th>
+          <th title="Tiempo que la aldea ya sostiene con sus recursos actuales antes de NPC y envios">Tiempo actual</th>
           <th>Tiempo objetivo</th>
           <th>Colas</th>
-          <th>Madera</th>
-          <th>Barro</th>
-          <th>Hierro</th>
-          <th>Cereal</th>
+          <th>${renderResourceLabel("wood")}</th>
+          <th>${renderResourceLabel("clay")}</th>
+          <th>${renderResourceLabel("iron")}</th>
+          <th>${renderResourceLabel("crop")}</th>
         </tr>
       </thead>
       <tbody>
@@ -1034,6 +1034,48 @@ function queueCountLabelWithSplit(counts, factor){
   if(factor <= 1) return main
   const split = active.map(item => `${item.label}:${fmtInt(splitAmount(item.units, factor))}`).join(" Â· ")
   return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
+}
+
+function queueCountLabel(counts){
+  const active = counts.filter(item => item.units > 0)
+  if(!active.length) return "-"
+  return active.map(item => {
+    const troopName = String(item.troopName || "").trim()
+    return troopName ? `${item.label}: ${troopName} ${fmtInt(item.units)}` : `${item.label}:${fmtInt(item.units)}`
+  }).join(" · ")
+}
+
+function queueCountLabelWithSplit(counts, factor){
+  const active = counts.filter(item => item.units > 0)
+  if(!active.length) return "-"
+  const formatItem = (item, units) => {
+    const troopName = String(item.troopName || "").trim()
+    return troopName ? `${item.label}: ${troopName} ${fmtInt(units)}` : `${item.label}:${fmtInt(units)}`
+  }
+  const main = active.map(item => formatItem(item, item.units)).join(" · ")
+  if(factor <= 1) return main
+  const split = active.map(item => formatItem(item, splitAmount(item.units, factor))).join(" · ")
+  return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
+}
+
+function getResourceUi(resourceKey){
+  const resources = {
+    wood: { label: "Madera", icon: "../npc/icons/wood.svg", className: "resource-wood" },
+    clay: { label: "Barro", icon: "../npc/icons/clay.svg", className: "resource-clay" },
+    iron: { label: "Hierro", icon: "../npc/icons/iron.svg", className: "resource-iron" },
+    crop: { label: "Cereal", icon: "../npc/icons/crop.svg", className: "resource-crop" }
+  }
+  return resources[resourceKey] || { label: resourceKey, icon: "", className: "" }
+}
+
+function renderResourceLabel(resourceKey){
+  const info = getResourceUi(resourceKey)
+  return `
+    <span class="resource-pill ${info.className}">
+      <img src="${info.icon}" alt="${info.label}" class="resource-pill-icon">
+      <span>${info.label}</span>
+    </span>
+  `
 }
 
 function queueCountLabel(counts){

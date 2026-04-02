@@ -466,6 +466,14 @@ select,input{
   background:var(--panel);
 }
 
+.training-result-meta-wide{
+  grid-template-columns:minmax(0, 1fr);
+}
+
+.training-summary-card-wide{
+  width:100%;
+}
+
 .npc-central-grid{
   display:grid;
   grid-template-columns: repeat(4, minmax(110px, 1fr));
@@ -480,6 +488,22 @@ select,input{
   padding:10px;
 }
 
+.resource-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+}
+
+.resource-pill-icon{
+  width:18px;
+  height:18px;
+  object-fit:contain;
+}
+
 .npc-central-label{
   color:var(--muted);
   font-size:11px;
@@ -492,6 +516,31 @@ select,input{
   margin-top:6px;
   font-size:18px;
   font-weight:900;
+}
+
+.resource-wood{
+  background:linear-gradient(180deg, rgba(31,90,54,.12), rgba(31,90,54,.04));
+  color:#1f5a36;
+}
+
+.resource-clay{
+  background:linear-gradient(180deg, rgba(199,104,31,.14), rgba(199,104,31,.05));
+  color:#a14d14;
+}
+
+.resource-iron{
+  background:linear-gradient(180deg, rgba(154,164,175,.2), rgba(154,164,175,.06));
+  color:#4b5563;
+}
+
+.resource-crop{
+  background:linear-gradient(180deg, rgba(215,169,13,.18), rgba(215,169,13,.05));
+  color:#8a6a00;
+}
+
+.training-transfer-table .resource-pill{
+  justify-content:center;
+  color:inherit;
 }
 
 .split-cell-main{

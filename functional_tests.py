@@ -703,6 +703,41 @@ def test_npc_training_queue_names(driver, base_url):
     assert "x2: C: Imperiano 171" in split_text, "Entre 2 no mantuvo el nombre de unidad en la segunda linea"
 
 
+def test_npc_training_resource_icons(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 323401, clay: 244262, iron: 215471, crop: 54486 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: [{
+            village: { key: "villa-a", name: "Villa A" },
+            status: "NPC",
+            currentTime: 857,
+            counts: [{ label:"C", troopName:"Imperiano", units:341 }],
+            deficit: withResourceTotal({ wood: 64618, clay: 65521, iron: 83615, crop: 27932 })
+          }]
+        });
+        return {
+          wide: document.querySelector('.training-result-meta-wide .training-summary-card-wide') !== null,
+          icons: [...document.querySelectorAll('.npc-central-item .resource-pill-icon')].map(x => x.getAttribute('src')),
+          tableIcons: [...document.querySelectorAll('.training-transfer-table thead .resource-pill-icon')].map(x => x.getAttribute('src'))
+        };
+        """
+    )
+
+    assert result["wide"], "NPC central no ocupo el ancho completo del bloque"
+    assert len(result["icons"]) == 4 and all("icons/" in item for item in result["icons"]), "NPC central no mostro iconos en los cuatro recursos"
+    assert len(result["tableIcons"]) == 4 and all("icons/" in item for item in result["tableIcons"]), "La tabla no mostro iconos en los encabezados de recursos"
+
+
 def main():
     try:
         driver = build_driver()
@@ -730,6 +765,7 @@ def main():
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
+                ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),
