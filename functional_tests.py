@@ -485,6 +485,47 @@ def test_npc_training_capacity_and_resources_import(driver, base_url):
     assert {"GALOS", "GERMANO", "HUNOS", "ROMANO"}.issubset(set(race_cells)), "NPC entrenamiento no detecto la raza desde las siglas del nombre"
 
 
+def test_npc_training_import_preserves_resource_order(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
+    )
+
+    village_order = [
+        cell.text.strip()
+        for cell in driver.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr td:first-child")
+    ]
+    central_labels = [
+        option.text.strip()
+        for option in Select(driver.find_element(By.ID, "trainingCentralVillage")).options
+    ]
+
+    assert village_order == [
+        "Villa Esperanza",
+        "Villa Emoción",
+        "Villa Charizard",
+        "Ojitos Rojos",
+    ], "NPC entrenamiento reordeno las aldeas de entrenamiento en vez de respetar el orden del pegado de recursos"
+    assert central_labels[:4] == [
+        "Villa Zero - Total 35228",
+        "FO001 - Total 44152",
+        "FO002 - Total 37623",
+        "Villa Pokemon - Total 214348",
+    ], "La lista de aldea central no respeto el orden original del pegado de recursos"
+
+
 def test_npc_training_central_total_and_village_transfers(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -649,6 +690,43 @@ def test_npc_training_npc_central_boxes(driver, base_url):
     assert result["values"] == ["323401", "244262", "215471", "54486"], "NPC central no mostro los valores en los cuadros correctos"
 
 
+def test_npc_training_central_overview_cards(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, ".training-central-card")) == 4
+    )
+
+    labels = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, ".training-central-card-label")
+    ]
+    values = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, ".training-central-card-value")
+    ]
+
+    assert labels == [
+        "CENTRAL ELEGIDA",
+        "RECURSOS ACTUALES",
+        "CAPACIDAD MAXIMA",
+        "TOTAL DISPONIBLE",
+    ], "La seccion de aldea central no quedo separada en bloques entendibles"
+    assert values[0] == "Villa Tormento", "La tarjeta principal de aldea central no mostro la aldea seleccionada"
+    assert values[3] == "946460", "La tarjeta de total disponible no mostro la suma de recursos de la central"
+
+
 def test_npc_training_split_buttons(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -758,13 +836,13 @@ def test_npc_training_queue_names(driver, base_url):
         """
     )
 
-    queue_cell = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(4)")
+    queue_cell = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)")
     assert "C: Imperiano 341" in queue_cell.text, "La columna Colas no mostro el nombre de la unidad del cuartel"
     assert "E: Equites Imperatoris 57" in queue_cell.text, "La columna Colas no mostro el nombre de la unidad del establo"
 
     driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
-    WebDriverWait(driver, 5).until(lambda d: "x2:" in d.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(4)").text)
-    split_text = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(4)").text
+    WebDriverWait(driver, 5).until(lambda d: "x2:" in d.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)").text)
+    split_text = driver.find_element(By.CSS_SELECTOR, ".training-transfer-table tbody tr td:nth-child(5)").text
     assert "x2: C: Imperiano 171" in split_text, "Entre 2 no mantuvo el nombre de unidad en la segunda linea"
 
 
@@ -803,6 +881,107 @@ def test_npc_training_resource_icons(driver, base_url):
     assert len(result["tableIcons"]) == 4 and all("icons/" in item for item in result["tableIcons"]), "La tabla no mostro iconos en los encabezados de recursos"
 
 
+def test_npc_training_delivered_and_delete_controls(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        """
+        const makeVillage = (name, key, sourceOrder) => ({
+          id: key,
+          name,
+          key,
+          sourceOrder,
+          race: "ROMANO",
+          raceSupported: true,
+          isTraining: true,
+          isDelivered: false,
+          isExcluded: false,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 1000, clay: 1000, iron: 1000, crop: 1000 }),
+          hasResources: true,
+          barracksTroop: "X",
+          stableTroop: "",
+          workshopTroop: "",
+          barracksLvl: 1,
+          stableLvl: 1,
+          workshopLvl: 1,
+          allyBonus: 0,
+          trooperBoost: 0,
+          helmetBarracks: 0,
+          helmetStable: 0
+        });
+
+        const villageA = makeVillage("Villa A", "a", 0);
+        const villageB = makeVillage("Villa B", "b", 1);
+        const villageC = makeVillage("Villa C", "c", 2);
+
+        allVillages = [villageA, villageB, villageC];
+        trainingVillages = [villageA, villageB, villageC];
+        trainingCentralKey = "";
+        trainingSplitModeByVillage = {};
+        window.__recalcHits = 0;
+        window.__originalRecalc = recalc;
+        recalc = () => { window.__recalcHits += 1; };
+
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 3,
+          villagePlans: [
+            { village: villageA, status: "NPC", currentTime: 0, counts: [{ label:"C", troopName:"Imperiano", units:100 }], deficit: withResourceTotal({ wood: 100, clay: 100, iron: 100, crop: 100 }) },
+            { village: villageB, status: "Lista", currentTime: 0, counts: [{ label:"C", troopName:"Imperiano", units:90 }], deficit: withResourceTotal({ wood: 90, clay: 90, iron: 90, crop: 90 }) },
+            { village: villageC, status: "Lista", currentTime: 0, counts: [{ label:"C", troopName:"Imperiano", units:80 }], deficit: withResourceTotal({ wood: 80, clay: 80, iron: 80, crop: 80 }) }
+          ]
+        });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.training-delivered-check[data-village-key="a"]').click()
+    WebDriverWait(driver, 5).until(
+        lambda d: d.find_elements(By.CSS_SELECTOR, ".training-transfer-table tbody tr")[-1].get_attribute("data-village-key") == "a"
+    )
+
+    delivered_state = driver.execute_script(
+        """
+        const rows = [...document.querySelectorAll('.training-transfer-table tbody tr')].map(row => ({
+          key: row.getAttribute('data-village-key'),
+          delivered: row.classList.contains('is-delivered')
+        }));
+        return {
+          rows,
+          excludedBeforeDelete: allVillages.find(v => v.key === 'b').isExcluded
+        };
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.training-row-delete-btn[data-village-key="b"]').click()
+    after_delete = driver.execute_script(
+        """
+        const restore = window.__originalRecalc;
+        const state = {
+          excluded: allVillages.find(v => v.key === 'b').isExcluded,
+          effectiveKeys: getEffectiveTrainingVillages().map(v => v.key),
+          recalcHits: window.__recalcHits
+        };
+        recalc = restore;
+        return state;
+        """
+    )
+
+    assert [item["key"] for item in delivered_state["rows"]] == ["b", "c", "a"], "La fila marcada como entregada no se mando al final"
+    assert delivered_state["rows"][-1]["delivered"], "La fila entregada no recibio el estilo gris/tachado"
+    assert not delivered_state["excludedBeforeDelete"], "La aldea ya estaba excluida antes de usar la papelera"
+    assert after_delete["excluded"], "La papelera no marco la aldea como excluida"
+    assert after_delete["effectiveKeys"] == ["a", "c"], "La papelera no saco la aldea del conjunto usado para el calculo"
+    assert after_delete["recalcHits"] == 1, "La papelera no disparo el recalculo de la matriz"
+
+
 def main():
     try:
         driver = build_driver()
@@ -825,13 +1004,16 @@ def main():
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
                 ("npc_training_resources_parser", test_npc_training_resources_parser),
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
+                ("npc_training_import_preserves_resource_order", test_npc_training_import_preserves_resource_order),
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("npc_training_central_capacity_cap", test_npc_training_central_capacity_cap),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
+                ("npc_training_central_overview_cards", test_npc_training_central_overview_cards),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
+                ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

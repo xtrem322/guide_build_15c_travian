@@ -372,16 +372,55 @@ select,input{
 
 .training-central-meta{
   min-height:46px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
   padding:10px 12px;
   border:1px solid var(--border);
   border-radius:10px;
   background:var(--bg);
   color:var(--muted);
   font-weight:700;
+}
+
+.training-central-overview{
+  display:grid;
+  grid-template-columns: minmax(200px, 1.2fr) repeat(3, minmax(150px, 1fr));
+  gap:10px;
+  width:100%;
+}
+
+.training-central-card{
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--panel);
+  padding:10px 12px;
+  min-width:0;
+}
+
+.training-central-card-main{
+  background:linear-gradient(180deg, rgba(37,99,235,.08), rgba(37,99,235,.02));
+}
+
+.training-central-card-label{
+  color:var(--muted);
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.4px;
+  text-transform:uppercase;
+}
+
+.training-central-card-value{
+  margin-top:6px;
+  color:var(--text);
+  font-size:18px;
+  font-weight:900;
+  line-height:1.2;
+  word-break:break-word;
+}
+
+.training-central-card-help{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.35;
 }
 
 .training-summary{
@@ -604,6 +643,51 @@ select,input{
 
 .training-transfer-table td.left,
 .training-transfer-table th.left{text-align:left}
+
+.training-delivered-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font-weight:900;
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+.training-delivered-toggle input[type="checkbox"]{
+  width:auto;
+  margin:0;
+  padding:0;
+}
+
+.training-transfer-row.is-delivered td{
+  background:#d1d5db;
+  color:#6b7280;
+  text-decoration:line-through;
+}
+
+.training-transfer-row.is-delivered .split-toggle-btn,
+.training-transfer-row.is-delivered .training-row-delete-btn,
+.training-transfer-row.is-delivered .training-delivered-toggle{
+  color:#4b5563;
+}
+
+.training-row-delete-btn{
+  width:36px;
+  height:36px;
+  border:1px solid var(--tm-border);
+  border-radius:10px;
+  background:var(--bg);
+  color:var(--danger);
+  cursor:pointer;
+  font-size:18px;
+  font-weight:900;
+  line-height:1;
+}
+
+.training-row-delete-btn:hover{
+  background:#fee2e2;
+}
 
 .training-status-ok{
   color:var(--ok);
@@ -829,6 +913,9 @@ tbody td.left{text-align:left}
   .training-central-grid,
   .training-summary,
   .training-result-meta{
+    grid-template-columns: 1fr;
+  }
+  .training-central-overview{
     grid-template-columns: 1fr;
   }
   .npc-central-grid{

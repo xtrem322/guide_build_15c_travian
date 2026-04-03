@@ -32,6 +32,12 @@ const TRAINING_RACE_PREFIX = {
 }
 const RESOURCE_KEYS = ["wood", "clay", "iron", "crop"]
 
+function compareVillageOrder(a, b){
+  const byOrder = n0(a?.sourceOrder) - n0(b?.sourceOrder)
+  if(byOrder) return byOrder
+  return String(a?.name || "").localeCompare(String(b?.name || ""), "es")
+}
+
 function fixCommonMojibake(text){
   return String(text || "")
     .replace(/Ã¡/g, "a")
@@ -211,7 +217,7 @@ function hasEnoughResources(have, need){
 }
 
 function getEffectiveTrainingVillages(){
-  return trainingVillages.filter(v => v.key !== trainingCentralKey)
+  return trainingVillages.filter(v => v.key !== trainingCentralKey && !v.isExcluded)
 }
 
 function getResourceSurplus(current, required){
@@ -359,6 +365,7 @@ function defaultTrainingVillage(data, previous){
   const tag = parseVillageTrainingTag(data.name)
   const base = previous ? { ...previous } : {
     id: ++trainingVillageId,
+    sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder))),
     race: tag.race || "HUNOS",
     barracksTroop: "",
     barracksLvl: 1,
@@ -369,13 +376,16 @@ function defaultTrainingVillage(data, previous){
     allyBonus: 0,
     trooperBoost: 0,
     helmetBarracks: 0,
-    helmetStable: 0
+    helmetStable: 0,
+    isDelivered: false,
+    isExcluded: false
   }
 
   return {
     ...base,
     name: tag.displayName,
     key: data.key,
+    sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder ?? base.sourceOrder))),
     warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
@@ -387,7 +397,15 @@ function defaultTrainingVillage(data, previous){
 }
 
 function getTrainingCentralCandidates(){
-  return allVillages
+  return allVillages.slice().sort(compareVillageOrder)
+}
+
+function getVillageTotalCapacity(village){
+  return Math.max(0, Math.floor(n0(village?.warehouseCap) * 3 + n0(village?.granaryCap)))
+}
+
+function findRecommendedTrainingCentralKey(){
+  const best = allVillages
     .slice()
     .sort((a, b) => {
       const byCurrent = n0(b.current?.total) - n0(a.current?.total)
@@ -395,12 +413,9 @@ function getTrainingCentralCandidates(){
       const capA = getVillageTotalCapacity(a)
       const capB = getVillageTotalCapacity(b)
       if(capB !== capA) return capB - capA
-      return a.name.localeCompare(b.name, "es")
-    })
-}
-
-function getVillageTotalCapacity(village){
-  return Math.max(0, Math.floor(n0(village?.warehouseCap) * 3 + n0(village?.granaryCap)))
+      return compareVillageOrder(a, b)
+    })[0]
+  return best?.key || ""
 }
 
 function getCentralNpcCapError(central, resources){
@@ -419,24 +434,29 @@ function importTrainingVillages(){
   const resourceRows = parseTravianTable($("trainingResourcesInput").value, parseResourcesRow, "resources")
   const prevByKey = new Map(allVillages.map(v => [v.key, v]))
   const resourceMap = new Map(resourceRows.map(r => [r.key, r]))
+  const resourceOrderMap = new Map(resourceRows.map((row, idx) => [row.key, idx]))
+  const capacityOrderMap = new Map(capacityRows.map((row, idx) => [row.key, idx]))
   const merged = []
 
   for(const cap of capacityRows){
     const res = resourceMap.get(cap.key)
+    const sourceOrder = resourceOrderMap.has(cap.key)
+      ? resourceOrderMap.get(cap.key)
+      : resourceRows.length + n0(capacityOrderMap.get(cap.key))
     merged.push(defaultTrainingVillage({
       ...cap,
+      sourceOrder,
       current: res ? res.current : zeroResources(),
       hasResources: Boolean(res)
     }, prevByKey.get(cap.key)))
   }
 
-  merged.sort((a, b) => a.name.localeCompare(b.name, "es"))
+  merged.sort(compareVillageOrder)
   allVillages = merged
   trainingVillages = merged.filter(v => v.isTraining)
 
-  const candidates = getTrainingCentralCandidates()
   if(!allVillages.some(v => v.key === trainingCentralKey)){
-    trainingCentralKey = candidates[0]?.key || ""
+    trainingCentralKey = findRecommendedTrainingCentralKey()
   }
 
   return {
@@ -1116,6 +1136,225 @@ function queueCountLabelWithSplit(counts, factor){
   if(factor <= 1) return main
   const split = active.map(item => formatItem(item, splitAmount(item.units, factor))).join(" · ")
   return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
+}
+
+function updateTrainingCentralSelect(){
+  const sel = $("trainingCentralVillage")
+  const candidates = getTrainingCentralCandidates()
+  const options = candidates.map(v => ({
+    value: v.key,
+    label: `${v.name} - Total ${fmtInt(v.current.total)}`
+  }))
+  fillSelect(sel, options, false)
+  if(options.some(opt => opt.value === trainingCentralKey)) sel.value = trainingCentralKey
+  else sel.value = options[0]?.value || ""
+  trainingCentralKey = sel.value || ""
+
+  const central = allVillages.find(v => v.key === trainingCentralKey)
+  const meta = $("trainingCentralMeta")
+  if(!central){
+    meta.textContent = "Importa aldeas para elegir una central."
+    return
+  }
+
+  const recommendedKey = findRecommendedTrainingCentralKey()
+  meta.innerHTML = `
+    <div class="training-central-overview">
+      <div class="training-central-card training-central-card-main">
+        <div class="training-central-card-label">Central elegida</div>
+        <div class="training-central-card-value">${central.name}</div>
+        <div class="training-central-card-help">${central.key === recommendedKey ? "Recomendada por ser la que mas recursos tiene ahora." : "Desde aqui sale el NPC para cubrir faltantes."}</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Recursos actuales</div>
+        <div class="training-central-card-value">${fmtInt(central.current.wood)} / ${fmtInt(central.current.clay)} / ${fmtInt(central.current.iron)} / ${fmtInt(central.current.crop)}</div>
+        <div class="training-central-card-help">Madera / Barro / Hierro / Cereal</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Capacidad maxima</div>
+        <div class="training-central-card-value">${fmtInt(central.warehouseCap)} / ${fmtInt(central.granaryCap)}</div>
+        <div class="training-central-card-help">Almacen / Granero</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Total disponible</div>
+        <div class="training-central-card-value">${fmtInt(central.current.total)}</div>
+        <div class="training-central-card-help">Suma de recursos que puede repartir como base del calculo.</div>
+      </div>
+    </div>
+  `
+}
+
+function setTrainingVillageDelivered(villageKey, delivered){
+  const village = allVillages.find(item => item.key === villageKey)
+  if(!village) return
+  village.isDelivered = Boolean(delivered)
+}
+
+function excludeTrainingVillage(villageKey){
+  const village = trainingVillages.find(item => item.key === villageKey)
+  if(!village) return
+  village.isExcluded = true
+  delete trainingSplitModeByVillage[villageKey]
+}
+
+function getRenderedVillagePlans(plan){
+  return (Array.isArray(plan?.villagePlans) ? plan.villagePlans : [])
+    .slice()
+    .sort((a, b) => {
+      const deliveredDiff = Number(Boolean(a?.village?.isDelivered)) - Number(Boolean(b?.village?.isDelivered))
+      if(deliveredDiff) return deliveredDiff
+      return compareVillageOrder(a?.village, b?.village)
+    })
+}
+
+function renderTrainingResult(plan){
+  const wrap = $("trainingResultWrap")
+  const body = $("trainingResultBody")
+  trainingLastRenderedPlan = plan || null
+
+  if(!plan?.feasible){
+    wrap.style.display = "none"
+    body.innerHTML = ""
+    return
+  }
+
+  wrap.style.display = "block"
+  const centralRemainingTotal = Math.max(0, n0(plan.centralAvailable?.total) - n0(plan.totalTransfer?.total))
+  const visibleVillagePlans = getRenderedVillagePlans(plan)
+
+  body.innerHTML = `
+    <div class="training-result-meta">
+      <div class="training-summary-card">
+        <div class="training-summary-label">Aldea central</div>
+        <div class="training-summary-value">${plan.central.name}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">Tiempo objetivo</div>
+        <div class="training-summary-value">${fmtTime(plan.targetSec)}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">NPC total</div>
+        <div class="training-summary-value">${fmtInt(plan.totalTransfer.total)}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">Central restante</div>
+        <div class="training-summary-value">${fmtInt(centralRemainingTotal)}</div>
+      </div>
+    </div>
+    <div class="training-result-meta training-result-meta-wide">
+      <div class="training-summary-card training-summary-card-wide">
+        <div class="training-summary-label">NPC central</div>
+        <div class="npc-central-grid">
+          <div class="npc-central-item resource-wood">
+            <div class="npc-central-label">${renderResourceLabel("wood")}</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.wood)}</div>
+          </div>
+          <div class="npc-central-item resource-clay">
+            <div class="npc-central-label">${renderResourceLabel("clay")}</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.clay)}</div>
+          </div>
+          <div class="npc-central-item resource-iron">
+            <div class="npc-central-label">${renderResourceLabel("iron")}</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.iron)}</div>
+          </div>
+          <div class="npc-central-item resource-crop">
+            <div class="npc-central-label">${renderResourceLabel("crop")}</div>
+            <div class="npc-central-value">${fmtInt(plan.totalTransfer.crop)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <table class="training-transfer-table">
+      <thead>
+        <tr>
+          <th>Entregado?</th>
+          <th class="left">Aldea</th>
+          <th>Estado</th>
+          <th>Tiempo objetivo</th>
+          <th>Colas</th>
+          <th>${renderResourceLabel("wood")}</th>
+          <th>${renderResourceLabel("clay")}</th>
+          <th>${renderResourceLabel("iron")}</th>
+          <th>${renderResourceLabel("crop")}</th>
+          <th>Quitar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${visibleVillagePlans.map(item => {
+          const splitFactor = getSplitFactorForVillage(item.village.key)
+          const deliveredClass = item.village.isDelivered ? " is-delivered" : ""
+          return `
+            <tr class="training-transfer-row${deliveredClass}" data-village-key="${item.village.key}">
+              <td>
+                <label class="training-delivered-toggle" title="Marcar aldea como entregada">
+                  <input type="checkbox" class="training-delivered-check" data-village-key="${item.village.key}" ${item.village.isDelivered ? "checked" : ""}>
+                  <span>OK</span>
+                </label>
+              </td>
+              <td class="left">${item.village.name}</td>
+              <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
+              <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
+              <td>
+                <div class="split-cell-main">${queueCountLabelWithSplit(item.counts, splitFactor)}</div>
+                ${renderSplitButtons(item.village.key)}
+              </td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.wood)}</div>${renderSplitValue(item.deficit.wood, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.clay)}</div>${renderSplitValue(item.deficit.clay, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.iron)}</div>${renderSplitValue(item.deficit.iron, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.crop)}</div>${renderSplitValue(item.deficit.crop, splitFactor)}</td>
+              <td>
+                <button type="button" class="training-row-delete-btn" data-village-key="${item.village.key}" title="Quitar esta aldea del calculo" aria-label="Quitar ${item.village.name} del calculo">&#128465;</button>
+              </td>
+            </tr>
+          `
+        }).join("")}
+      </tbody>
+    </table>
+    ${plan.villageTransfers.length ? `
+      <div class="troop-matrix-title" style="margin-top:18px">Envios Entre Aldeas</div>
+      <table class="training-transfer-table">
+        <thead>
+          <tr>
+            <th class="left">Desde</th>
+            <th class="left">Hacia</th>
+            <th>Recurso</th>
+            <th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${plan.villageTransfers.map(item => `
+            <tr>
+              <td class="left">${item.from}</td>
+              <td class="left">${item.to}</td>
+              <td>${item.resource}</td>
+              <td>${fmtInt(item.amount)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    ` : ""}
+  `
+
+  body.querySelectorAll(".split-toggle-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleSplitFactorForVillage(
+        button.getAttribute("data-village-key") || "",
+        Math.floor(n0(button.getAttribute("data-factor")))
+      )
+    })
+  })
+  body.querySelectorAll(".training-delivered-check").forEach((input) => {
+    input.addEventListener("change", () => {
+      setTrainingVillageDelivered(input.getAttribute("data-village-key") || "", input.checked)
+      renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+    })
+  })
+  body.querySelectorAll(".training-row-delete-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      excludeTrainingVillage(button.getAttribute("data-village-key") || "")
+      recalc()
+    })
+  })
 }
 
 function recalc(){
