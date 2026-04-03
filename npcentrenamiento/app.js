@@ -392,11 +392,15 @@ function getTrainingCentralCandidates(){
     .sort((a, b) => {
       const byCurrent = n0(b.current?.total) - n0(a.current?.total)
       if(byCurrent) return byCurrent
-      const capA = n0(a.warehouseCap) * 3 + n0(a.granaryCap)
-      const capB = n0(b.warehouseCap) * 3 + n0(b.granaryCap)
+      const capA = getVillageTotalCapacity(a)
+      const capB = getVillageTotalCapacity(b)
       if(capB !== capA) return capB - capA
       return a.name.localeCompare(b.name, "es")
     })
+}
+
+function getVillageTotalCapacity(village){
+  return Math.max(0, Math.floor(n0(village?.warehouseCap) * 3 + n0(village?.granaryCap)))
 }
 
 function importTrainingVillages(){
@@ -611,6 +615,11 @@ function evaluateTrainingTarget(targetSec){
     else if(plan.counts.length) plan.status = "Lista"
   }
 
+  const centralCapacityTotal = getVillageTotalCapacity(central)
+  if(centralCapacityTotal < n0(centralNpcNeed.total)){
+    return { feasible:false, reason:"El reparto NPC supera la capacidad total de la aldea central." }
+  }
+
   if(n0(central.current?.total) < n0(centralNpcNeed.total)){
     return { feasible:false, reason:"La aldea central no tiene total suficiente para cubrir el reparto NPC." }
   }
@@ -622,6 +631,7 @@ function evaluateTrainingTarget(targetSec){
     totalTransfer: centralNpcNeed,
     villageTransfers,
     central,
+    centralCapacityTotal,
     centralAvailable: withResourceTotal(central.current),
     activeQueues
   }
