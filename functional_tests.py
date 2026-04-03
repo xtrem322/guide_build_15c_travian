@@ -591,7 +591,7 @@ def test_npc_training_central_capacity_cap(driver, base_url):
           });
 
           allVillages = [
-            fake("Central", "central", { wood: 1000, clay: 0, iron: 0, crop: 0 }, false, 300, 0),
+            fake("Central", "central", { wood: 1000, clay: 1000, iron: 1000, crop: 1000 }, false, 300, 800),
             fake("FR Aldea A", "a", { wood: 0, clay: 0, iron: 0, crop: 0 }, true, 999999, 999999)
           ];
           trainingVillages = allVillages.filter(v => v.isTraining);
@@ -600,7 +600,7 @@ def test_npc_training_central_capacity_cap(driver, base_url):
           getTrainingRequirement = () => ({
             queues:[{label:"C"}],
             counts:[{label:"C", units:10}],
-            resources: withResourceTotal({ wood: 950, clay: 0, iron: 0, crop: 0 })
+            resources: withResourceTotal({ wood: 450, clay: 250, iron: 300, crop: 0 })
           });
           findVillageCurrentTime = () => 0;
           getTrainingCentralCandidates = () => allVillages.slice();
@@ -618,8 +618,8 @@ def test_npc_training_central_capacity_cap(driver, base_url):
         """
     )
 
-    assert not result["feasible"], "NPC entrenamiento no puso la capacidad total de la central como tope"
-    assert "capacidad total de la aldea central" in result["reason"], "NPC entrenamiento no explico que el limite es la capacidad de la central"
+    assert not result["feasible"], "NPC entrenamiento no puso el tope por recurso del almacen/granero central"
+    assert "tope de madera del almacen central (300)" in result["reason"], "NPC entrenamiento no explico el tope por recurso de la central"
 
 
 def test_npc_training_npc_central_boxes(driver, base_url):

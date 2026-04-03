@@ -403,6 +403,17 @@ function getVillageTotalCapacity(village){
   return Math.max(0, Math.floor(n0(village?.warehouseCap) * 3 + n0(village?.granaryCap)))
 }
 
+function getCentralNpcCapError(central, resources){
+  const warehouseCap = Math.max(0, Math.floor(n0(central?.warehouseCap)))
+  const granaryCap = Math.max(0, Math.floor(n0(central?.granaryCap)))
+
+  if(n0(resources?.wood) > warehouseCap) return `El reparto NPC supera el tope de madera del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.clay) > warehouseCap) return `El reparto NPC supera el tope de barro del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.iron) > warehouseCap) return `El reparto NPC supera el tope de hierro del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.crop) > granaryCap) return `El reparto NPC supera el tope de cereal del granero central (${fmtInt(granaryCap)}).`
+  return ""
+}
+
 function importTrainingVillages(){
   const capacityRows = parseTravianTable($("trainingCapacityInput").value, parseCapacityRow, "capacity")
   const resourceRows = parseTravianTable($("trainingResourcesInput").value, parseResourcesRow, "resources")
@@ -615,9 +626,9 @@ function evaluateTrainingTarget(targetSec){
     else if(plan.counts.length) plan.status = "Lista"
   }
 
-  const centralCapacityTotal = getVillageTotalCapacity(central)
-  if(centralCapacityTotal < n0(centralNpcNeed.total)){
-    return { feasible:false, reason:"El reparto NPC supera la capacidad total de la aldea central." }
+  const centralCapError = getCentralNpcCapError(central, centralNpcNeed)
+  if(centralCapError){
+    return { feasible:false, reason: centralCapError }
   }
 
   if(n0(central.current?.total) < n0(centralNpcNeed.total)){
@@ -631,7 +642,6 @@ function evaluateTrainingTarget(targetSec){
     totalTransfer: centralNpcNeed,
     villageTransfers,
     central,
-    centralCapacityTotal,
     centralAvailable: withResourceTotal(central.current),
     activeQueues
   }
