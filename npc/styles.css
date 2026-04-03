@@ -663,13 +663,16 @@ select,input{
 .training-transfer-row.is-delivered td{
   background:#d1d5db;
   color:#6b7280;
-  text-decoration:line-through;
 }
 
 .training-transfer-row.is-delivered .split-toggle-btn,
 .training-transfer-row.is-delivered .training-row-delete-btn,
 .training-transfer-row.is-delivered .training-delivered-toggle{
   color:#4b5563;
+}
+
+.training-transfer-row.is-delivered .training-village-name{
+  text-decoration:line-through;
 }
 
 .training-row-delete-btn{

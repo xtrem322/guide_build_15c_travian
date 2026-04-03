@@ -953,9 +953,14 @@ def test_npc_training_delivered_and_delete_controls(driver, base_url):
           key: row.getAttribute('data-village-key'),
           delivered: row.classList.contains('is-delivered')
         }));
+        const deliveredRow = document.querySelector('.training-transfer-row.is-delivered');
+        const nameEl = deliveredRow ? deliveredRow.querySelector('.training-village-name') : null;
+        const numberEl = deliveredRow ? deliveredRow.querySelector('td:nth-child(6) .split-cell-main') : null;
         return {
           rows,
-          excludedBeforeDelete: allVillages.find(v => v.key === 'b').isExcluded
+          excludedBeforeDelete: allVillages.find(v => v.key === 'b').isExcluded,
+          nameStyle: nameEl ? window.getComputedStyle(nameEl).textDecorationLine : "",
+          numberStyle: numberEl ? window.getComputedStyle(numberEl).textDecorationLine : ""
         };
         """
     )
@@ -976,6 +981,8 @@ def test_npc_training_delivered_and_delete_controls(driver, base_url):
 
     assert [item["key"] for item in delivered_state["rows"]] == ["b", "c", "a"], "La fila marcada como entregada no se mando al final"
     assert delivered_state["rows"][-1]["delivered"], "La fila entregada no recibio el estilo gris/tachado"
+    assert delivered_state["nameStyle"] == "line-through", "El nombre de la aldea entregada no quedo tachado"
+    assert delivered_state["numberStyle"] == "none", "Los valores numericos de la aldea entregada no debian quedar tachados"
     assert not delivered_state["excludedBeforeDelete"], "La aldea ya estaba excluida antes de usar la papelera"
     assert after_delete["excluded"], "La papelera no marco la aldea como excluida"
     assert after_delete["effectiveKeys"] == ["a", "c"], "La papelera no saco la aldea del conjunto usado para el calculo"

@@ -983,7 +983,7 @@ function renderTrainingResult(plan){
           const splitFactor = getSplitFactorForVillage(item.village.key)
           return `
             <tr>
-              <td class="left">${item.village.name}</td>
+              <td class="left"><span class="training-village-name">${item.village.name}</span></td>
               <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
               <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
               <td>
@@ -1291,7 +1291,7 @@ function renderTrainingResult(plan){
                   <span>OK</span>
                 </label>
               </td>
-              <td class="left">${item.village.name}</td>
+              <td class="left"><span class="training-village-name">${item.village.name}</span></td>
               <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
               <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
               <td>
