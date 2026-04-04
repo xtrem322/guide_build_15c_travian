@@ -881,6 +881,73 @@ def test_npc_training_resource_icons(driver, base_url):
     assert len(result["tableIcons"]) == 4 and all("icons/" in item for item in result["tableIcons"]), "La tabla no mostro iconos en los encabezados de recursos"
 
 
+def test_npc_training_total_and_capacity_fit_columns(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const villageA = {
+          key: "villa-a",
+          name: "Villa A",
+          sourceOrder: 0,
+          current: withResourceTotal({ wood: 300000, clay: 10000, iron: 5000, crop: 1000 }),
+          warehouseCap: 350000,
+          granaryCap: 50000
+        };
+        const villageB = {
+          key: "villa-b",
+          name: "Villa B",
+          sourceOrder: 1,
+          current: withResourceTotal({ wood: 330000, clay: 10000, iron: 5000, crop: 49000 }),
+          warehouseCap: 350000,
+          granaryCap: 50000
+        };
+
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              currentTime: 0,
+              counts: [{ label:"C", troopName:"Imperiano", units:100 }],
+              deficit: withResourceTotal({ wood: 40000, clay: 1000, iron: 2000, crop: 1000 })
+            },
+            {
+              village: villageB,
+              status: "NPC",
+              currentTime: 0,
+              counts: [{ label:"C", troopName:"Imperiano", units:90 }],
+              deficit: withResourceTotal({ wood: 40000, clay: 2000, iron: 1000, crop: 2000 })
+            }
+          ]
+        });
+
+        const headers = [...document.querySelectorAll('.training-transfer-table thead th')].map(item => item.textContent.trim());
+        const totalA = document.querySelector('[data-village-key="villa-a"] td:nth-child(10)').textContent.trim();
+        const fitA = document.querySelector('[data-village-key="villa-a"] td:nth-child(11)').textContent.trim();
+        const totalB = document.querySelector('[data-village-key="villa-b"] td:nth-child(10)').textContent.trim();
+        const fitB = document.querySelector('[data-village-key="villa-b"] td:nth-child(11)').textContent.trim();
+
+        return { headers, totalA, fitA, totalB, fitB };
+        """
+    )
+
+    assert "Total" in result["headers"], "La matriz no agrego la columna Total"
+    assert "CALZA?" in result["headers"], "La matriz no agrego la columna CALZA?"
+    assert result["totalA"].startswith("44000"), "La columna Total no sumo correctamente los recursos a enviar"
+    assert result["fitA"].startswith("SI"), "CALZA? debia indicar SI cuando todos los recursos entran en almacen/granero"
+    assert result["totalB"].startswith("45000"), "La columna Total no sumo correctamente la segunda fila"
+    assert result["fitB"].startswith("NO"), "CALZA? debia indicar NO cuando algun recurso supera la capacidad"
+
+
 def test_npc_training_delivered_and_delete_controls(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -1020,6 +1087,7 @@ def main():
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
+                ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),

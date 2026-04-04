@@ -1207,6 +1207,26 @@ function getRenderedVillagePlans(plan){
     })
 }
 
+function getVillageCapacityFit(village, deficit){
+  const warehouseCap = Math.max(0, Math.floor(n0(village?.warehouseCap)))
+  const granaryCap = Math.max(0, Math.floor(n0(village?.granaryCap)))
+  const future = withResourceTotal({
+    wood: n0(village?.current?.wood) + n0(deficit?.wood),
+    clay: n0(village?.current?.clay) + n0(deficit?.clay),
+    iron: n0(village?.current?.iron) + n0(deficit?.iron),
+    crop: n0(village?.current?.crop) + n0(deficit?.crop)
+  })
+  const overflow = []
+  if(future.wood > warehouseCap) overflow.push("Madera")
+  if(future.clay > warehouseCap) overflow.push("Barro")
+  if(future.iron > warehouseCap) overflow.push("Hierro")
+  if(future.crop > granaryCap) overflow.push("Cereal")
+  return {
+    fits: overflow.length === 0,
+    detail: overflow.length ? `Supera: ${overflow.join(", ")}` : "Entra completo"
+  }
+}
+
 function renderTrainingResult(plan){
   const wrap = $("trainingResultWrap")
   const body = $("trainingResultBody")
@@ -1276,6 +1296,8 @@ function renderTrainingResult(plan){
           <th>${renderResourceLabel("clay")}</th>
           <th>${renderResourceLabel("iron")}</th>
           <th>${renderResourceLabel("crop")}</th>
+          <th>Total</th>
+          <th>CALZA?</th>
           <th>Quitar</th>
         </tr>
       </thead>
@@ -1283,6 +1305,8 @@ function renderTrainingResult(plan){
         ${visibleVillagePlans.map(item => {
           const splitFactor = getSplitFactorForVillage(item.village.key)
           const deliveredClass = item.village.isDelivered ? " is-delivered" : ""
+          const totalToSend = withResourceTotal(item.deficit)
+          const capacityFit = getVillageCapacityFit(item.village, item.deficit)
           return `
             <tr class="training-transfer-row${deliveredClass}" data-village-key="${item.village.key}">
               <td>
@@ -1302,6 +1326,11 @@ function renderTrainingResult(plan){
               <td><div class="split-cell-main">${fmtInt(item.deficit.clay)}</div>${renderSplitValue(item.deficit.clay, splitFactor)}</td>
               <td><div class="split-cell-main">${fmtInt(item.deficit.iron)}</div>${renderSplitValue(item.deficit.iron, splitFactor)}</td>
               <td><div class="split-cell-main">${fmtInt(item.deficit.crop)}</div>${renderSplitValue(item.deficit.crop, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(totalToSend.total)}</div>${renderSplitValue(totalToSend.total, splitFactor)}</td>
+              <td>
+                <div class="training-fit-pill ${capacityFit.fits ? "ok" : "bad"}">${capacityFit.fits ? "SI" : "NO"}</div>
+                <div class="training-fit-note">${capacityFit.detail}</div>
+              </td>
               <td>
                 <button type="button" class="training-row-delete-btn" data-village-key="${item.village.key}" title="Quitar esta aldea del calculo" aria-label="Quitar ${item.village.name} del calculo">&#128465;</button>
               </td>
