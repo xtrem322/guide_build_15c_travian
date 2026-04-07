@@ -261,6 +261,7 @@ function defaultVillage(data, previous){
   const base = previous ? { ...previous } : {
     id: ++partyVillageId,
     sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder))),
+    partyCount: 1,
     isDelivered: false,
     isExcluded: false
   }
@@ -273,7 +274,8 @@ function defaultVillage(data, previous){
     warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
-    hasResources: Boolean(data.hasResources)
+    hasResources: Boolean(data.hasResources),
+    partyCount: n0(base.partyCount) === 2 ? 2 : 1
   }
 }
 
@@ -316,17 +318,31 @@ function importPartyVillages(){
   }
 }
 
-function getPartyCount(){
-  const value = Math.floor(n0($("partyCount")?.value || 1))
-  return value === 2 ? 2 : 1
+function getVillagePartyCount(village){
+  return n0(village?.partyCount) === 2 ? 2 : 1
 }
 
-function getPartyRequirement(){
-  return multiplyResources(PARTY_COST, getPartyCount())
+function setVillagePartyCount(villageKey, count){
+  const village = allVillages.find(item => item.key === villageKey)
+  if(!village) return
+  village.partyCount = Math.floor(n0(count)) === 2 ? 2 : 1
 }
 
-function buildPartyCounts(){
-  return [{ label:"GF", troopName:"Grandes fiestas", units:getPartyCount() }]
+function getPartyRequirementForCount(count){
+  const normalized = Math.floor(n0(count)) === 2 ? 2 : 1
+  return multiplyResources(PARTY_COST, normalized)
+}
+
+function getPartyRequirementForVillage(village){
+  return getPartyRequirementForCount(getVillagePartyCount(village))
+}
+
+function buildPartyCountsForVillage(village){
+  return [{ label:"GF", troopName:"Grandes fiestas", units:getVillagePartyCount(village) }]
+}
+
+function getConfiguredPartyCountTotal(villages){
+  return (Array.isArray(villages) ? villages : []).reduce((acc, village) => acc + getVillagePartyCount(village), 0)
 }
 
 function getCentralCandidates(){
@@ -382,15 +398,13 @@ function evaluatePartyPlan(){
   const activeVillages = getActiveDestinationVillages()
   if(!activeVillages.length) return { feasible:false, reason:"No quedan aldeas destino para repartir." }
 
-  const requirement = getPartyRequirement()
-  const counts = buildPartyCounts()
   const plans = activeVillages.map(village => ({
     village,
-    counts,
-    required: requirement,
+    counts: buildPartyCountsForVillage(village),
+    required: getPartyRequirementForVillage(village),
     deficit: zeroResources(),
-    deficitBeforeVillageSupport: positiveDeficit(requirement, village.current),
-    surplus: getResourceSurplus(village.current, requirement),
+    deficitBeforeVillageSupport: positiveDeficit(getPartyRequirementForVillage(village), village.current),
+    surplus: getResourceSurplus(village.current, getPartyRequirementForVillage(village)),
     supportFromVillages: zeroResources(),
     supportFromCentral: zeroResources(),
     status: "Lista"
@@ -437,14 +451,14 @@ function evaluatePartyPlan(){
     centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
   }
 
-  const centralReserve = withResourceTotal(requirement)
+  const centralReserve = getPartyRequirementForVillage(central)
   const centralCapError = getCentralNpcCapError(central, centralNpcNeed)
   if(centralCapError) return { feasible:false, reason: centralCapError }
 
   if(n0(central.current?.total) < n0(centralReserve.total)){
     return {
       feasible:false,
-      reason:`La aldea central no tiene total suficiente para reservar sus ${fmtInt(getPartyCount())} grandes fiestas (${fmtInt(centralReserve.total)}).`
+      reason:`La aldea central no tiene total suficiente para reservar sus ${fmtInt(getVillagePartyCount(central))} grandes fiestas (${fmtInt(centralReserve.total)}).`
     }
   }
 
@@ -458,14 +472,13 @@ function evaluatePartyPlan(){
 
   return {
     feasible: true,
-    partyCount: getPartyCount(),
+    totalPartyCount: getConfiguredPartyCountTotal(activeVillages) + getVillagePartyCount(central),
     villagePlans: plans,
     totalTransfer: centralNpcNeed,
     villageTransfers,
     central,
     centralAvailable: withResourceTotal(central.current),
     centralReserve,
-    requirement,
     plannedVillages: activeVillages.length + 1
   }
 }
@@ -478,9 +491,9 @@ function renderSummary(plan){
     return
   }
 
-  const centralExists = Boolean(allVillages.find(village => village.key === partyCentralKey))
   const activeVillages = getActiveDestinationVillages()
-  const plannedVillageCount = activeVillages.length + (centralExists ? 1 : 0)
+  const central = allVillages.find(village => village.key === partyCentralKey)
+  const totalPartyCount = plan?.totalPartyCount ?? getConfiguredPartyCountTotal(allVillages)
 
   summary.style.display = "grid"
   summary.innerHTML = `
@@ -493,12 +506,12 @@ function renderSummary(plan){
       <div class="training-summary-value">${fmtInt(activeVillages.length)}</div>
     </div>
     <div class="training-summary-card">
-      <div class="training-summary-label">Fiestas por aldea</div>
-      <div class="training-summary-value">${fmtInt(getPartyCount())}</div>
+      <div class="training-summary-label">Fiestas central</div>
+      <div class="training-summary-value">${fmtInt(getVillagePartyCount(central))}</div>
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Fiestas totales</div>
-      <div class="training-summary-value">${fmtInt((plan?.plannedVillages || plannedVillageCount) * getPartyCount())}</div>
+      <div class="training-summary-value">${fmtInt(totalPartyCount)}</div>
     </div>
   `
 }
@@ -533,11 +546,15 @@ function renderVillageTable(){
   }
 
   wrap.style.display = "block"
-  const requirement = getPartyRequirement()
+  const partyCountOptions = [
+    { value: "1", label: "1" },
+    { value: "2", label: "2" }
+  ]
 
   for(const village of allVillages){
     const tr = document.createElement("tr")
     const isCentral = village.key === partyCentralKey
+    const requirement = getPartyRequirementForVillage(village)
     const localEnough = village.hasResources && (isCentral
       ? n0(village.current?.total) >= n0(requirement.total)
       : hasEnoughResources(village.current, requirement))
@@ -564,9 +581,19 @@ function renderVillageTable(){
       <td class="readonly">${fmtInt(village.current.total)}</td>
       <td class="readonly">${fmtInt(village.warehouseCap)}</td>
       <td class="readonly">${fmtInt(village.granaryCap)}</td>
-      <td class="readonly">${fmtInt(getPartyCount())}</td>
+      <td class="party-count-cell"></td>
       <td class="readonly ${fitClass}">${fitLabel}</td>
     `
+    const partyCell = tr.querySelector(".party-count-cell")
+    const select = document.createElement("select")
+    select.className = "training-level-select"
+    fillSelect(select, partyCountOptions, false)
+    select.value = String(getVillagePartyCount(village))
+    select.addEventListener("change", () => {
+      setVillagePartyCount(village.key, select.value)
+      recalc()
+    })
+    partyCell.appendChild(select)
     body.appendChild(tr)
   }
 }
@@ -590,7 +617,7 @@ function updateCentralSelect(){
     return
   }
 
-  const reserve = getPartyRequirement()
+  const reserve = getPartyRequirementForVillage(central)
   const recommendedKey = findRecommendedCentralKey()
   meta.innerHTML = `
     <div class="training-central-overview">
@@ -602,7 +629,7 @@ function updateCentralSelect(){
       <div class="training-central-card">
         <div class="training-central-card-label">Reserva fiestas</div>
         <div class="training-central-card-value">${fmtInt(reserve.total)}</div>
-        <div class="training-central-card-help">${fmtInt(getPartyCount())} fiesta(s) propias: ${fmtInt(reserve.wood)} / ${fmtInt(reserve.clay)} / ${fmtInt(reserve.iron)} / ${fmtInt(reserve.crop)}</div>
+        <div class="training-central-card-help">${fmtInt(getVillagePartyCount(central))} fiesta(s) propias: ${fmtInt(reserve.wood)} / ${fmtInt(reserve.clay)} / ${fmtInt(reserve.iron)} / ${fmtInt(reserve.crop)}</div>
       </div>
       <div class="training-central-card">
         <div class="training-central-card-label">Recursos actuales</div>
@@ -926,8 +953,8 @@ function recalc(){
   renderPartyResult(plan.feasible ? plan : null)
 
   if(plan.feasible){
-    $("partyImportStatus").textContent = `Fiestas por aldea: ${fmtInt(plan.partyCount)} · NPC central: ${fmtInt(plan.totalTransfer.total)} · Destinos: ${fmtInt(getActiveDestinationVillages().length)}`
-    showStatus(`OK. Reserva central: ${fmtInt(plan.centralReserve.total)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
+    $("partyImportStatus").textContent = `Fiestas totales: ${fmtInt(plan.totalPartyCount)} · Reserva central: ${fmtInt(plan.centralReserve.total)} · NPC central: ${fmtInt(plan.totalTransfer.total)}`
+    showStatus(`OK. Central: ${fmtInt(getVillagePartyCount(plan.central))} fiesta(s) · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
   } else {
     $("partyImportStatus").textContent = partyLastImportSummary
     showStatus(plan.reason, "bad")
@@ -954,7 +981,6 @@ function init(){
     recalc()
   })
 
-  $("partyCount").addEventListener("change", recalc)
   $("partyCentralVillage").addEventListener("change", () => {
     partyCentralKey = $("partyCentralVillage").value || ""
     recalc()

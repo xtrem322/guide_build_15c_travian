@@ -23,8 +23,8 @@
     <div class="mode-panel">
       <div class="mode-title">NPC grandes fiestas</div>
       <div class="training-note">
-        Pega la vista completa de <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>. Luego elige la aldea central y cuantas
-        <strong>grandes fiestas</strong> quieres por aldea. Cada gran fiesta cuesta
+        Pega la vista completa de <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>. Luego elige la aldea central y configura en la tabla
+        cuantas <strong>grandes fiestas</strong> quieres para cada aldea. Cada gran fiesta cuesta
         <strong>29700 / 33250 / 32000 / 6700</strong> y la central reserva primero sus propias fiestas antes de cubrir el NPC para las demas.
       </div>
 
@@ -46,17 +46,10 @@
 
       <div class="training-central-grid">
         <div class="train-item">
-          <div class="tool-label">Grandes fiestas por aldea</div>
-          <select id="partyCount">
-            <option value="1" selected>1</option>
-            <option value="2">2</option>
-          </select>
-        </div>
-        <div class="train-item">
           <div class="tool-label">Aldea central que reparte el NPC</div>
           <select id="partyCentralVillage"></select>
         </div>
-        <div class="training-central-meta" id="partyCentralMeta" style="grid-column:1 / -1"></div>
+        <div class="training-central-meta" id="partyCentralMeta"></div>
       </div>
 
       <div class="training-summary" id="partySummary" style="display:none"></div>

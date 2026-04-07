@@ -1178,6 +1178,13 @@ def test_npc_party_capacity_and_resources_import(driver, base_url):
     assert summary_values == ["9", "8", "1", "9"], "NPC grandes fiestas no mostro bien el resumen inicial"
     assert roles.count("Central") == 1 and roles.count("Destino") == 8, "NPC grandes fiestas no marco correctamente la central y los destinos"
 
+    row_selects = driver.find_elements(By.CSS_SELECTOR, "#partyVillageBody select")
+    assert len(row_selects) == 9, "NPC grandes fiestas no habilito el selector 1/2 por cada aldea importada"
+    Select(row_selects[1]).select_by_value("2")
+    WebDriverWait(driver, 10).until(
+        lambda d: d.find_elements(By.CSS_SELECTOR, "#partySummary .training-summary-value")[3].text.strip() == "10"
+    )
+
 
 def test_npc_party_central_total_and_village_transfers(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
@@ -1185,17 +1192,18 @@ def test_npc_party_central_total_and_village_transfers(driver, base_url):
 
     result = driver.execute_script(
         """
-        const originalRequirement = getPartyRequirement;
-        const originalCounts = buildPartyCounts;
+        const originalRequirement = getPartyRequirementForVillage;
+        const originalCounts = buildPartyCountsForVillage;
         try {
-          getPartyRequirement = () => withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 });
-          buildPartyCounts = () => [{ label:"GF", troopName:"Grandes fiestas", units:1 }];
+          getPartyRequirementForVillage = () => withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 });
+          buildPartyCountsForVillage = (village) => [{ label:"GF", troopName:"Grandes fiestas", units: village.partyCount || 1 }];
 
           const fake = (name, key, current) => ({
             id: key,
             name,
             key,
             sourceOrder: 0,
+            partyCount: 1,
             isDelivered: false,
             isExcluded: false,
             warehouseCap: 999999,
@@ -1224,8 +1232,8 @@ def test_npc_party_central_total_and_village_transfers(driver, base_url):
             statuses: plan.villagePlans.map(item => ({ name: item.village.name, status: item.status }))
           };
         } finally {
-          getPartyRequirement = originalRequirement;
-          buildPartyCounts = originalCounts;
+          getPartyRequirementForVillage = originalRequirement;
+          buildPartyCountsForVillage = originalCounts;
         }
         """
     )
