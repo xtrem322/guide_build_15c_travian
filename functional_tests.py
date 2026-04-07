@@ -303,7 +303,7 @@ def assert_theme_toggle(driver):
 
 
 def test_theme_toggle(driver, base_url):
-    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/oasis/", "/listadevacas/", "/cultura/"]
+    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/npcgrandesfiestas/", "/oasis/", "/listadevacas/", "/cultura/"]
     for path in paths:
         driver.get(f"{base_url}{path}")
         assert_theme_toggle(driver)
@@ -1056,6 +1056,300 @@ def test_npc_training_delivered_and_delete_controls(driver, base_url):
     assert after_delete["recalcHits"] == 1, "La papelera no disparo el recalculo de la matriz"
 
 
+def test_npc_party_capacity_and_resources_import(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    driver.execute_script(
+        "document.getElementById('partyCapacityInput').value = arguments[0];"
+        "document.getElementById('partyResourcesInput').value = arguments[1];",
+        CAPACITY_EXAMPLE,
+        RESOURCES_EXAMPLE
+    )
+    driver.find_element(By.ID, "btnImportParty").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partyVillageBody tr")) == 9
+    )
+
+    status = driver.find_element(By.ID, "partyImportStatus").text
+    summary_values = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, "#partySummary .training-summary-value")
+    ]
+    central_options = Select(driver.find_element(By.ID, "partyCentralVillage")).options
+    roles = [
+        cell.text.strip()
+        for cell in driver.find_elements(By.CSS_SELECTOR, "#partyVillageBody tr td:nth-child(2)")
+    ]
+
+    assert "Cruce valido: 9" in status, "NPC grandes fiestas no cruzo correctamente capacidad y recursos"
+    assert len(central_options) == 9, "NPC grandes fiestas no lleno las candidatas a aldea central"
+    assert summary_values == ["9", "8", "1", "9"], "NPC grandes fiestas no mostro bien el resumen inicial"
+    assert roles.count("Central") == 1 and roles.count("Destino") == 8, "NPC grandes fiestas no marco correctamente la central y los destinos"
+
+
+def test_npc_party_central_total_and_village_transfers(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    result = driver.execute_script(
+        """
+        const originalRequirement = getPartyRequirement;
+        const originalCounts = buildPartyCounts;
+        try {
+          getPartyRequirement = () => withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 });
+          buildPartyCounts = () => [{ label:"GF", troopName:"Grandes fiestas", units:1 }];
+
+          const fake = (name, key, current) => ({
+            id: key,
+            name,
+            key,
+            sourceOrder: 0,
+            isDelivered: false,
+            isExcluded: false,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal(current),
+            hasResources: true
+          });
+
+          allVillages = [
+            fake("Central", "central", { wood: 1000, clay: 0, iron: 0, crop: 0 }),
+            fake("Aldea A", "a", { wood: 300, clay: 0, iron: 0, crop: 0 }),
+            fake("Aldea B", "b", { wood: 0, clay: 0, iron: 300, crop: 0 })
+          ];
+          allVillages[0].sourceOrder = 0;
+          allVillages[1].sourceOrder = 1;
+          allVillages[2].sourceOrder = 2;
+          partyCentralKey = "central";
+
+          const plan = evaluatePartyPlan();
+          return {
+            feasible: plan.feasible,
+            npcTotal: plan.totalTransfer.total,
+            npcIron: plan.totalTransfer.iron,
+            reserveTotal: plan.centralReserve.total,
+            transfers: plan.villageTransfers,
+            statuses: plan.villagePlans.map(item => ({ name: item.village.name, status: item.status }))
+          };
+        } finally {
+          getPartyRequirement = originalRequirement;
+          buildPartyCounts = originalCounts;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC grandes fiestas no considero la reserva central mas el reparto NPC"
+    assert result["reserveTotal"] == 300, "NPC grandes fiestas no reservo correctamente la fiesta propia de la central"
+    assert result["npcTotal"] == 100 and result["npcIron"] == 100, "NPC grandes fiestas no dejo solo el faltante real para el NPC central"
+    assert len(result["transfers"]) == 2, "NPC grandes fiestas no genero envios entre aldeas cuando habia excedentes utiles"
+    assert {item["status"] for item in result["statuses"]} == {"Envio", "Envio + NPC"}, "NPC grandes fiestas no distinguio bien entre envio y NPC"
+
+
+def test_npc_party_split_buttons(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    driver.execute_script(
+        """
+        partySplitModeByVillage = {};
+        renderPartyResult({
+          feasible: true,
+          partyCount: 2,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          centralReserve: withResourceTotal({ wood: 59400, clay: 66500, iron: 64000, crop: 13400 }),
+          villagePlans: [{
+            village: { key: "villa-a", name: "Villa A" },
+            status: "NPC",
+            counts: [{ label:"GF", troopName:"Grandes fiestas", units:2 }],
+            deficit: withResourceTotal({ wood: 64618, clay: 65521, iron: 83615, crop: 27932 })
+          }]
+        });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
+    labels_after_2 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]
+    active_after_2 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="2"]')
+    inactive_3 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="3"]')
+
+    driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="3"]').click()
+    labels_after_3 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]
+    active_after_3 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="3"]')
+    inactive_2 = driver.find_elements(By.CSS_SELECTOR, '.split-toggle-btn.active[data-factor="2"]')
+
+    assert any("x2: GF: Grandes fiestas 1" in text for text in labels_after_2), "Entre 2 no dividio la cantidad de fiestas en la segunda linea"
+    assert any("x2: 32309" in text for text in labels_after_2), "Entre 2 no dividio los recursos en la segunda linea"
+    assert len(active_after_2) == 1 and len(inactive_3) == 0, "Entre 2 no quedo como unico boton activo en grandes fiestas"
+    assert any("x3: GF: Grandes fiestas 1" in text for text in labels_after_3), "Entre 3 no mostro la segunda linea de fiestas"
+    assert any("x3: 21540" in text for text in labels_after_3), "Entre 3 no dividio los recursos en la segunda linea"
+    assert len(active_after_3) == 1 and len(inactive_2) == 0, "Entre 3 no reemplazo correctamente al boton activo en grandes fiestas"
+
+
+def test_npc_party_total_and_capacity_fit_columns(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    result = driver.execute_script(
+        """
+        const villageA = {
+          key: "villa-a",
+          name: "Villa A",
+          sourceOrder: 0,
+          current: withResourceTotal({ wood: 300000, clay: 10000, iron: 5000, crop: 1000 }),
+          warehouseCap: 350000,
+          granaryCap: 50000
+        };
+        const villageB = {
+          key: "villa-b",
+          name: "Villa B",
+          sourceOrder: 1,
+          current: withResourceTotal({ wood: 330000, clay: 10000, iron: 5000, crop: 49000 }),
+          warehouseCap: 350000,
+          granaryCap: 50000
+        };
+
+        renderPartyResult({
+          feasible: true,
+          partyCount: 1,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          centralReserve: withResourceTotal({ wood: 29700, clay: 33250, iron: 32000, crop: 6700 }),
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }],
+              deficit: withResourceTotal({ wood: 40000, clay: 1000, iron: 2000, crop: 1000 })
+            },
+            {
+              village: villageB,
+              status: "NPC",
+              counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }],
+              deficit: withResourceTotal({ wood: 40000, clay: 2000, iron: 1000, crop: 2000 })
+            }
+          ]
+        });
+
+        const headers = [...document.querySelectorAll('.training-transfer-table thead th')].map(item => item.textContent.trim());
+        const totalA = document.querySelector('[data-village-key="villa-a"] td:nth-child(9)').textContent.trim();
+        const fitA = document.querySelector('[data-village-key="villa-a"] td:nth-child(10)').textContent.trim();
+        const totalB = document.querySelector('[data-village-key="villa-b"] td:nth-child(9)').textContent.trim();
+        const fitB = document.querySelector('[data-village-key="villa-b"] td:nth-child(10)').textContent.trim();
+
+        return { headers, totalA, fitA, totalB, fitB };
+        """
+    )
+
+    assert "Total" in result["headers"], "La matriz de grandes fiestas no agrego la columna Total"
+    assert "CALZA?" in result["headers"], "La matriz de grandes fiestas no agrego la columna CALZA?"
+    assert result["totalA"].startswith("44000"), "La columna Total no sumo correctamente la primera fila de grandes fiestas"
+    assert result["fitA"].startswith("SI"), "CALZA? debia indicar SI cuando el envio entra completo en grandes fiestas"
+    assert result["totalB"].startswith("45000"), "La columna Total no sumo correctamente la segunda fila de grandes fiestas"
+    assert result["fitB"].startswith("NO"), "CALZA? debia indicar NO cuando el envio supera la capacidad en grandes fiestas"
+
+
+def test_npc_party_delivered_and_delete_controls(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    driver.execute_script(
+        """
+        const makeVillage = (name, key, sourceOrder) => ({
+          id: key,
+          name,
+          key,
+          sourceOrder,
+          isDelivered: false,
+          isExcluded: false,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 1000, clay: 1000, iron: 1000, crop: 1000 }),
+          hasResources: true
+        });
+
+        const central = makeVillage("Central", "central", 0);
+        const villageA = makeVillage("Villa A", "a", 1);
+        const villageB = makeVillage("Villa B", "b", 2);
+        const villageC = makeVillage("Villa C", "c", 3);
+
+        allVillages = [central, villageA, villageB, villageC];
+        partyCentralKey = "central";
+        partySplitModeByVillage = {};
+        window.__recalcHits = 0;
+        window.__originalRecalc = recalc;
+        recalc = () => { window.__recalcHits += 1; };
+
+        renderPartyResult({
+          feasible: true,
+          partyCount: 1,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          centralReserve: withResourceTotal({ wood: 29700, clay: 33250, iron: 32000, crop: 6700 }),
+          villagePlans: [
+            { village: villageA, status: "NPC", counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }], deficit: withResourceTotal({ wood: 100, clay: 100, iron: 100, crop: 100 }) },
+            { village: villageB, status: "Lista", counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }], deficit: withResourceTotal({ wood: 90, clay: 90, iron: 90, crop: 90 }) },
+            { village: villageC, status: "Lista", counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }], deficit: withResourceTotal({ wood: 80, clay: 80, iron: 80, crop: 80 }) }
+          ]
+        });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.training-delivered-check[data-village-key="a"]').click()
+    WebDriverWait(driver, 5).until(
+        lambda d: d.find_elements(By.CSS_SELECTOR, ".training-transfer-table tbody tr")[-1].get_attribute("data-village-key") == "a"
+    )
+
+    delivered_state = driver.execute_script(
+        """
+        const rows = [...document.querySelectorAll('.training-transfer-table tbody tr')].map(row => ({
+          key: row.getAttribute('data-village-key'),
+          delivered: row.classList.contains('is-delivered')
+        }));
+        const deliveredRow = document.querySelector('.training-transfer-row.is-delivered');
+        const nameEl = deliveredRow ? deliveredRow.querySelector('.training-village-name') : null;
+        const numberEl = deliveredRow ? deliveredRow.querySelector('td:nth-child(5) .split-cell-main') : null;
+        return {
+          rows,
+          excludedBeforeDelete: allVillages.find(v => v.key === 'b').isExcluded,
+          nameStyle: nameEl ? window.getComputedStyle(nameEl).textDecorationLine : "",
+          numberStyle: numberEl ? window.getComputedStyle(numberEl).textDecorationLine : ""
+        };
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.training-row-delete-btn[data-village-key="b"]').click()
+    after_delete = driver.execute_script(
+        """
+        const restore = window.__originalRecalc;
+        const state = {
+          excluded: allVillages.find(v => v.key === 'b').isExcluded,
+          effectiveKeys: getActiveDestinationVillages().map(v => v.key),
+          recalcHits: window.__recalcHits
+        };
+        recalc = restore;
+        return state;
+        """
+    )
+
+    assert [item["key"] for item in delivered_state["rows"]] == ["b", "c", "a"], "La fila entregada no se mando al final en grandes fiestas"
+    assert delivered_state["rows"][-1]["delivered"], "La fila entregada no recibio el estilo gris/tachado en grandes fiestas"
+    assert delivered_state["nameStyle"] == "line-through", "El nombre de la aldea entregada no quedo tachado en grandes fiestas"
+    assert delivered_state["numberStyle"] == "none", "Los valores numericos de la aldea entregada no debian quedar tachados en grandes fiestas"
+    assert not delivered_state["excludedBeforeDelete"], "La aldea ya estaba excluida antes de usar la papelera en grandes fiestas"
+    assert after_delete["excluded"], "La papelera no marco la aldea como excluida en grandes fiestas"
+    assert after_delete["effectiveKeys"] == ["a", "c"], "La papelera no saco la aldea del conjunto usado para el calculo en grandes fiestas"
+    assert after_delete["recalcHits"] == 1, "La papelera no disparo el recalculo en grandes fiestas"
+
+
 def main():
     try:
         driver = build_driver()
@@ -1089,6 +1383,11 @@ def main():
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
+                ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
+                ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
+                ("npc_party_split_buttons", test_npc_party_split_buttons),
+                ("npc_party_total_and_capacity_fit_columns", test_npc_party_total_and_capacity_fit_columns),
+                ("npc_party_delivered_and_delete_controls", test_npc_party_delivered_and_delete_controls),
                 ("oasis", test_oasis),
                 ("vacas", test_vacas),
                 ("cultura", test_cultura),

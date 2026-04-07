@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+<title>NPC Grandes Fiestas</title>
+<link rel="stylesheet" href="../npc/styles.css">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="sticky-top">
+    <div id="nav"></div>
+    <script src="../nav.js" defer></script>
+
+    <h1 class="page-title">NPC Grandes Fiestas</h1>
+    <div class="subtitle">Planificador de NPC entre aldeas para asegurar grandes fiestas con una aldea central</div>
+
+    <div class="statusline" id="statusLine">Pega Capacidad aldea y Los Recursos para empezar.</div>
+
+    <div class="mode-panel">
+      <div class="mode-title">NPC grandes fiestas</div>
+      <div class="training-note">
+        Pega la vista completa de <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>. Luego elige la aldea central y cuantas
+        <strong>grandes fiestas</strong> quieres por aldea. Cada gran fiesta cuesta
+        <strong>29700 / 33250 / 32000 / 6700</strong> y la central reserva primero sus propias fiestas antes de cubrir el NPC para las demas.
+      </div>
+
+      <div class="training-import-grid">
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Capacidad aldea</div>
+          <textarea id="partyCapacityInput" class="training-textarea" placeholder="Pega aqui el bloque completo que contiene Village / Warehouse / Granary"></textarea>
+        </div>
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Los Recursos</div>
+          <textarea id="partyResourcesInput" class="training-textarea" placeholder="Pega aqui el bloque completo que contiene Village / Madera / Barro / Hierro / Cereal / Merchants"></textarea>
+        </div>
+      </div>
+
+      <div class="training-actions">
+        <button class="btn btn-orange" id="btnImportParty" type="button">Importar aldeas</button>
+        <div class="training-import-status" id="partyImportStatus">Sin datos importados.</div>
+      </div>
+
+      <div class="training-central-grid">
+        <div class="train-item">
+          <div class="tool-label">Grandes fiestas por aldea</div>
+          <select id="partyCount">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Aldea central que reparte el NPC</div>
+          <select id="partyCentralVillage"></select>
+        </div>
+        <div class="training-central-meta" id="partyCentralMeta" style="grid-column:1 / -1"></div>
+      </div>
+
+      <div class="training-summary" id="partySummary" style="display:none"></div>
+
+      <div class="training-table-wrap" id="partyTableWrap" style="display:none">
+        <div class="training-table-scroll">
+          <table class="training-table">
+            <thead>
+              <tr id="partyHeaderRow"></tr>
+            </thead>
+            <tbody id="partyVillageBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="training-result-wrap" id="partyResultWrap" style="display:none">
+        <div class="troop-matrix-title">Plan NPC grandes fiestas</div>
+        <div class="training-result-body" id="partyResultBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./app.js" defer></script>
+</body>
+</html>
