@@ -1240,9 +1240,99 @@ def test_npc_party_central_total_and_village_transfers(driver, base_url):
 
     assert result["feasible"], "NPC grandes fiestas no considero la reserva central mas el reparto NPC"
     assert result["reserveTotal"] == 300, "NPC grandes fiestas no reservo correctamente la fiesta propia de la central"
-    assert result["npcTotal"] == 100 and result["npcIron"] == 100, "NPC grandes fiestas no dejo solo el faltante real para el NPC central"
-    assert len(result["transfers"]) == 2, "NPC grandes fiestas no genero envios entre aldeas cuando habia excedentes utiles"
-    assert {item["status"] for item in result["statuses"]} == {"Envio", "Envio + NPC"}, "NPC grandes fiestas no distinguio bien entre envio y NPC"
+    assert result["npcTotal"] == 300 and result["npcIron"] == 200, "NPC grandes fiestas no dejo solo el faltante real para el NPC central"
+    assert len(result["transfers"]) == 0, "NPC grandes fiestas no debia generar envios entre aldeas mientras la central aun alcanzaba"
+    assert {item["status"] for item in result["statuses"]} == {"NPC"}, "NPC grandes fiestas debia usar solo NPC central mientras la central no se agotara"
+
+
+def test_npc_party_uses_village_transfers_only_after_central_exhausts(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    result = driver.execute_script(
+        """
+        const originalRequirement = getPartyRequirementForVillage;
+        const originalCounts = buildPartyCountsForVillage;
+        try {
+          getPartyRequirementForVillage = () => withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 });
+          buildPartyCountsForVillage = (village) => [{ label:"GF", troopName:"Grandes fiestas", units: village.partyCount || 1 }];
+
+          const fake = (name, key, current, order) => ({
+            id: key,
+            name,
+            key,
+            sourceOrder: order,
+            partyCount: 1,
+            isInitialZone: false,
+            isDelivered: false,
+            isExcluded: false,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal(current),
+            hasResources: true
+          });
+
+          allVillages = [
+            fake("Central", "central", { wood: 450, clay: 0, iron: 0, crop: 0 }, 0),
+            fake("Aldea A", "a", { wood: 300, clay: 0, iron: 0, crop: 0 }, 1),
+            fake("Aldea B", "b", { wood: 0, clay: 0, iron: 300, crop: 0 }, 2)
+          ];
+          partyCentralKey = "central";
+
+          const plan = evaluatePartyPlan();
+          return {
+            feasible: plan.feasible,
+            npcTotal: plan.totalTransfer.total,
+            transfers: plan.villageTransfers,
+            statuses: plan.villagePlans.map(item => ({ name: item.village.name, status: item.status }))
+          };
+        } finally {
+          getPartyRequirementForVillage = originalRequirement;
+          buildPartyCountsForVillage = originalCounts;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC grandes fiestas debia permitir envios entre aldeas cuando la central ya no cubria todo"
+    assert result["npcTotal"] == 150, "NPC grandes fiestas no debia seguir pidiendo mas NPC del que la central podia cubrir tras agotarse"
+    assert len(result["transfers"]) == 2, "NPC grandes fiestas debia generar solo el apoyo faltante entre aldeas cuando la central se agotaba"
+    assert {item["status"] for item in result["statuses"]} == {"Envio", "Envio + NPC"}, "NPC grandes fiestas no distinguio correctamente el uso de la central agotada y el apoyo entre aldeas"
+
+
+def test_npc_party_excludes_initial_zone_villages(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    capacity_zi = CAPACITY_EXAMPLE.replace("FO001", "ZI001").replace("FO002", "ZI002")
+    resources_zi = RESOURCES_EXAMPLE.replace("FO001", "ZI001").replace("FO002", "ZI002")
+    driver.execute_script(
+        "document.getElementById('partyCapacityInput').value = arguments[0];"
+        "document.getElementById('partyResourcesInput').value = arguments[1];",
+        capacity_zi,
+        resources_zi
+    )
+    driver.find_element(By.ID, "btnImportParty").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partyVillageBody tr")) == 9
+    )
+
+    central_labels = [
+        option.text.strip()
+        for option in Select(driver.find_element(By.ID, "partyCentralVillage")).options
+    ]
+    roles = [
+        cell.text.strip()
+        for cell in driver.find_elements(By.CSS_SELECTOR, "#partyVillageBody tr td:nth-child(2)")
+    ]
+    summary_values = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, "#partySummary .training-summary-value")
+    ]
+
+    assert not any(label.startswith("ZI") for label in central_labels), "NPC grandes fiestas no excluyo las aldeas ZI de las candidatas a central"
+    assert roles.count("Excluida ZI") == 2, "NPC grandes fiestas no marco las aldeas ZI como excluidas del ejercicio"
+    assert summary_values == ["9", "6", "1", "7"], "NPC grandes fiestas no desconto las aldeas ZI del ejercicio"
 
 
 def test_npc_party_split_buttons(driver, base_url):
@@ -1484,6 +1574,8 @@ def main():
                 ("npc_training_mobile_horizontal_scroll", test_npc_training_mobile_horizontal_scroll),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
+                ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),
+                ("npc_party_excludes_initial_zone_villages", test_npc_party_excludes_initial_zone_villages),
                 ("npc_party_split_buttons", test_npc_party_split_buttons),
                 ("npc_party_total_and_capacity_fit_columns", test_npc_party_total_and_capacity_fit_columns),
                 ("npc_party_delivered_and_delete_controls", test_npc_party_delivered_and_delete_controls),

@@ -15,6 +15,10 @@ let partyLastImportSummary = "Sin datos importados."
 let partyLastRenderedPlan = null
 let partySplitModeByVillage = {}
 
+function isInitialZoneVillageName(name){
+  return /^ZI/i.test(String(cleanVillageNameText(name) || "").trim())
+}
+
 function n0(v){
   const x = Number(v)
   return Number.isFinite(x) ? x : 0
@@ -262,20 +266,27 @@ function defaultVillage(data, previous){
     id: ++partyVillageId,
     sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder))),
     partyCount: 1,
+    isInitialZone: false,
     isDelivered: false,
     isExcluded: false
   }
 
+  const name = cleanVillageNameText(data.name)
+  const isInitialZone = isInitialZoneVillageName(name)
+  const shouldExclude = isInitialZone || Boolean(base.isExcluded)
+
   return {
     ...base,
-    name: cleanVillageNameText(data.name),
+    name,
     key: data.key,
     sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder ?? base.sourceOrder))),
     warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
     hasResources: Boolean(data.hasResources),
-    partyCount: n0(base.partyCount) === 2 ? 2 : 1
+    partyCount: n0(base.partyCount) === 2 ? 2 : 1,
+    isInitialZone,
+    isExcluded: shouldExclude
   }
 }
 
@@ -346,7 +357,7 @@ function getConfiguredPartyCountTotal(villages){
 }
 
 function getCentralCandidates(){
-  return allVillages.slice().sort(compareVillageOrder)
+  return allVillages.filter(village => !village.isInitialZone).slice().sort(compareVillageOrder)
 }
 
 function getVillageTotalCapacity(village){
@@ -369,6 +380,10 @@ function findRecommendedCentralKey(){
 
 function getActiveDestinationVillages(){
   return allVillages.filter(village => village.key !== partyCentralKey && !village.isExcluded)
+}
+
+function getExerciseVillages(){
+  return allVillages.filter(village => !village.isExcluded || village.key === partyCentralKey)
 }
 
 function getCentralNpcCapError(central, resources){
@@ -398,6 +413,15 @@ function evaluatePartyPlan(){
   const activeVillages = getActiveDestinationVillages()
   if(!activeVillages.length) return { feasible:false, reason:"No quedan aldeas destino para repartir." }
 
+  const centralReserve = getPartyRequirementForVillage(central)
+  if(n0(central.current?.total) < n0(centralReserve.total)){
+    return {
+      feasible:false,
+      reason:`La aldea central no tiene total suficiente para reservar sus ${fmtInt(getVillagePartyCount(central))} grandes fiestas (${fmtInt(centralReserve.total)}).`
+    }
+  }
+
+  const centralAvailableForNpc = Math.max(0, n0(central.current?.total) - n0(centralReserve.total))
   const plans = activeVillages.map(village => ({
     village,
     counts: buildPartyCountsForVillage(village),
@@ -410,36 +434,44 @@ function evaluatePartyPlan(){
     status: "Lista"
   }))
 
+  const initialNpcNeed = plans.reduce((acc, plan) => addResources(acc, plan.deficitBeforeVillageSupport), zeroResources())
   const villageTransfers = []
-  for(const resource of RESOURCE_KEYS){
-    const donors = plans
-      .filter(item => n0(item.surplus?.[resource]) > 0)
-      .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
-    const receivers = plans
-      .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
-      .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+  let remainingVillageSupportNeed = Math.max(0, n0(initialNpcNeed.total) - centralAvailableForNpc)
 
-    for(const receiver of receivers){
-      let missing = n0(receiver.deficitBeforeVillageSupport?.[resource])
-      for(const donor of donors){
-        if(donor.village.key === receiver.village.key || missing <= 0) continue
-        const available = n0(donor.surplus?.[resource])
-        if(available <= 0) continue
-        const amount = Math.min(available, missing)
-        donor.surplus[resource] -= amount
-        donor.surplus = withResourceTotal(donor.surplus)
-        receiver.deficitBeforeVillageSupport[resource] -= amount
-        receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
-        receiver.supportFromVillages[resource] += amount
-        receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
-        villageTransfers.push({
-          from: donor.village.name,
-          to: receiver.village.name,
-          resource,
-          amount
-        })
-        missing -= amount
+  if(remainingVillageSupportNeed > 0){
+    for(const resource of RESOURCE_KEYS){
+      const donors = plans
+        .filter(item => n0(item.surplus?.[resource]) > 0)
+        .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
+      const receivers = plans
+        .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
+        .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+
+      for(const receiver of receivers){
+        let missing = Math.min(n0(receiver.deficitBeforeVillageSupport?.[resource]), remainingVillageSupportNeed)
+        for(const donor of donors){
+          if(donor.village.key === receiver.village.key || missing <= 0 || remainingVillageSupportNeed <= 0) continue
+          const available = n0(donor.surplus?.[resource])
+          if(available <= 0) continue
+          const amount = Math.min(available, missing, remainingVillageSupportNeed)
+          donor.surplus[resource] -= amount
+          donor.surplus = withResourceTotal(donor.surplus)
+          receiver.deficitBeforeVillageSupport[resource] -= amount
+          receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
+          receiver.supportFromVillages[resource] += amount
+          receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
+          villageTransfers.push({
+            from: donor.village.name,
+            to: receiver.village.name,
+            resource,
+            amount
+          })
+          missing -= amount
+          remainingVillageSupportNeed -= amount
+        }
+        if(remainingVillageSupportNeed <= 0) break
       }
+      if(remainingVillageSupportNeed <= 0) break
     }
   }
 
@@ -451,22 +483,13 @@ function evaluatePartyPlan(){
     centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
   }
 
-  const centralReserve = getPartyRequirementForVillage(central)
   const centralCapError = getCentralNpcCapError(central, centralNpcNeed)
   if(centralCapError) return { feasible:false, reason: centralCapError }
 
-  if(n0(central.current?.total) < n0(centralReserve.total)){
+  if(n0(centralNpcNeed.total) > centralAvailableForNpc){
     return {
       feasible:false,
-      reason:`La aldea central no tiene total suficiente para reservar sus ${fmtInt(getVillagePartyCount(central))} grandes fiestas (${fmtInt(centralReserve.total)}).`
-    }
-  }
-
-  const totalNeededInCentral = n0(centralReserve.total) + n0(centralNpcNeed.total)
-  if(n0(central.current?.total) < totalNeededInCentral){
-    return {
-      feasible:false,
-      reason:`La aldea central necesita ${fmtInt(totalNeededInCentral)} en total para reservar sus fiestas y cubrir el NPC, pero solo tiene ${fmtInt(central.current.total)}.`
+      reason:`La aldea central se agotaria tras reservar ${fmtInt(centralReserve.total)} y aun faltan ${fmtInt(centralNpcNeed.total)} para el NPC.`
     }
   }
 
@@ -493,7 +516,7 @@ function renderSummary(plan){
 
   const activeVillages = getActiveDestinationVillages()
   const central = allVillages.find(village => village.key === partyCentralKey)
-  const totalPartyCount = plan?.totalPartyCount ?? getConfiguredPartyCountTotal(allVillages)
+  const totalPartyCount = plan?.totalPartyCount ?? getConfiguredPartyCountTotal(getExerciseVillages())
 
   summary.style.display = "grid"
   summary.innerHTML = `
@@ -561,7 +584,8 @@ function renderVillageTable(){
 
     let role = "Destino"
     if(isCentral) role = "Central"
-    if(village.isExcluded && !isCentral) role = "Excluida"
+    if(village.isInitialZone) role = "Excluida ZI"
+    else if(village.isExcluded && !isCentral) role = "Excluida"
 
     const fitLabel = !village.hasResources
       ? "Sin datos"
@@ -589,6 +613,7 @@ function renderVillageTable(){
     select.className = "training-level-select"
     fillSelect(select, partyCountOptions, false)
     select.value = String(getVillagePartyCount(village))
+    select.disabled = village.isExcluded && !isCentral
     select.addEventListener("change", () => {
       setVillagePartyCount(village.key, select.value)
       recalc()
@@ -613,7 +638,9 @@ function updateCentralSelect(){
   const central = allVillages.find(village => village.key === partyCentralKey)
   const meta = $("partyCentralMeta")
   if(!central){
-    meta.textContent = "Importa aldeas para elegir una central."
+    meta.textContent = allVillages.length
+      ? "No hay aldeas validas para elegir como central. Las aldeas ZI se excluyen automaticamente."
+      : "Importa aldeas para elegir una central."
     return
   }
 
@@ -639,7 +666,7 @@ function updateCentralSelect(){
       <div class="training-central-card">
         <div class="training-central-card-label">Total y capacidad</div>
         <div class="training-central-card-value">${fmtInt(central.current.total)}</div>
-        <div class="training-central-card-help">Almacen ${fmtInt(central.warehouseCap)} / Granero ${fmtInt(central.granaryCap)}</div>
+        <div class="training-central-card-help">Almacen ${fmtInt(central.warehouseCap)} / Granero ${fmtInt(central.granaryCap)} · Las aldeas que empiezan por ZI se excluyen.</div>
       </div>
     </div>
   `
