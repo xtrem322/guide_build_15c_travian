@@ -1056,6 +1056,96 @@ def test_npc_training_delivered_and_delete_controls(driver, base_url):
     assert after_delete["recalcHits"] == 1, "La papelera no disparo el recalculo de la matriz"
 
 
+def test_npc_training_mobile_horizontal_scroll(driver, base_url):
+    original_size = driver.get_window_size()
+    try:
+        driver.set_window_size(390, 844)
+        driver.get(f"{base_url}/npcentrenamiento/")
+        wait_for(driver, "#btnImportTraining")
+
+        capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+        resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+        driver.execute_script(
+            "document.getElementById('trainingCapacityInput').value = arguments[0];"
+            "document.getElementById('trainingResourcesInput').value = arguments[1];",
+            capacity_training,
+            resources_training
+        )
+        driver.find_element(By.ID, "btnImportTraining").click()
+
+        WebDriverWait(driver, 10).until(
+            lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
+        )
+
+        config_scroll = driver.execute_script(
+            """
+            const scroller = document.querySelector('.training-table-scroll');
+            const before = scroller.scrollLeft;
+            scroller.scrollLeft = 260;
+            return {
+              clientWidth: scroller.clientWidth,
+              scrollWidth: scroller.scrollWidth,
+              before,
+              after: scroller.scrollLeft,
+              overflowX: getComputedStyle(scroller).overflowX
+            };
+            """
+        )
+
+        driver.execute_script(
+            """
+            trainingSplitModeByVillage = {};
+            renderTrainingResult({
+              feasible: true,
+              targetSec: 120,
+              totalTransfer: withResourceTotal({ wood: 323401, clay: 244262, iron: 215471, crop: 54486 }),
+              villageTransfers: [],
+              central: { name: "Central" },
+              centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+              activeQueues: 2,
+              villagePlans: [{
+                village: {
+                  key: "villa-a",
+                  name: "Villa A",
+                  sourceOrder: 0,
+                  current: withResourceTotal({ wood: 300000, clay: 10000, iron: 5000, crop: 1000 }),
+                  warehouseCap: 350000,
+                  granaryCap: 50000
+                },
+                status: "NPC",
+                currentTime: 0,
+                counts: [{ label:"C", troopName:"Imperiano", units:341 }, { label:"E", troopName:"Equites Imperatoris", units:57 }],
+                deficit: withResourceTotal({ wood: 64618, clay: 65521, iron: 83615, crop: 27932 })
+              }]
+            });
+            """
+        )
+
+        result_scroll = driver.execute_script(
+            """
+            const scroller = document.getElementById('trainingResultBody');
+            const before = scroller.scrollLeft;
+            scroller.scrollLeft = 260;
+            return {
+              clientWidth: scroller.clientWidth,
+              scrollWidth: scroller.scrollWidth,
+              before,
+              after: scroller.scrollLeft,
+              overflowX: getComputedStyle(scroller).overflowX
+            };
+            """
+        )
+    finally:
+        driver.set_window_size(original_size["width"], original_size["height"])
+
+    assert config_scroll["scrollWidth"] > config_scroll["clientWidth"], "La tabla de configuracion no excedio el ancho en movil para poder desplazar"
+    assert config_scroll["after"] > config_scroll["before"], "La tabla de configuracion no permitio desplazamiento horizontal en movil"
+    assert config_scroll["overflowX"] in ("auto", "scroll"), "La tabla de configuracion no dejo habilitado el overflow horizontal en movil"
+    assert result_scroll["scrollWidth"] > result_scroll["clientWidth"], "La tabla de resultados no excedio el ancho en movil para poder desplazar"
+    assert result_scroll["after"] > result_scroll["before"], "La tabla de resultados no permitio desplazamiento horizontal en movil"
+    assert result_scroll["overflowX"] in ("auto", "scroll"), "La tabla de resultados no dejo habilitado el overflow horizontal en movil"
+
+
 def test_npc_party_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
     wait_for(driver, "#btnImportParty")
@@ -1383,6 +1473,7 @@ def main():
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
+                ("npc_training_mobile_horizontal_scroll", test_npc_training_mobile_horizontal_scroll),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_split_buttons", test_npc_party_split_buttons),
