@@ -1242,7 +1242,7 @@ def test_npc_party_central_total_and_village_transfers(driver, base_url):
     assert result["reserveTotal"] == 300, "NPC grandes fiestas no reservo correctamente la fiesta propia de la central"
     assert result["npcTotal"] == 300 and result["npcIron"] == 200, "NPC grandes fiestas no dejo solo el faltante real para el NPC central"
     assert len(result["transfers"]) == 0, "NPC grandes fiestas no debia generar envios entre aldeas mientras la central aun alcanzaba"
-    assert {item["status"] for item in result["statuses"]} == {"NPC"}, "NPC grandes fiestas debia usar solo NPC central mientras la central no se agotara"
+    assert {item["status"] for item in result["statuses"]} == {"NPC", "Central"}, "NPC grandes fiestas debia usar solo NPC central mientras la central no se agotara"
 
 
 def test_npc_party_uses_village_transfers_only_after_central_exhausts(driver, base_url):
@@ -1296,7 +1296,75 @@ def test_npc_party_uses_village_transfers_only_after_central_exhausts(driver, ba
     assert result["feasible"], "NPC grandes fiestas debia permitir envios entre aldeas cuando la central ya no cubria todo"
     assert result["npcTotal"] == 150, "NPC grandes fiestas no debia seguir pidiendo mas NPC del que la central podia cubrir tras agotarse"
     assert len(result["transfers"]) == 2, "NPC grandes fiestas debia generar solo el apoyo faltante entre aldeas cuando la central se agotaba"
-    assert {item["status"] for item in result["statuses"]} == {"Envio", "Envio + NPC"}, "NPC grandes fiestas no distinguio correctamente el uso de la central agotada y el apoyo entre aldeas"
+    assert {item["status"] for item in result["statuses"]} == {"Envio", "Envio + NPC", "Central"}, "NPC grandes fiestas no distinguio correctamente el uso de la central agotada y el apoyo entre aldeas"
+
+
+def test_npc_party_central_row_can_be_deleted_from_plan(driver, base_url):
+    driver.get(f"{base_url}/npcgrandesfiestas/")
+    wait_for(driver, "#btnImportParty")
+
+    driver.execute_script(
+        """
+        const makeVillage = (name, key, sourceOrder) => ({
+          id: key,
+          name,
+          key,
+          sourceOrder,
+          partyCount: 1,
+          isInitialZone: false,
+          isDelivered: false,
+          isExcluded: false,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 1000, clay: 1000, iron: 1000, crop: 1000 }),
+          hasResources: true
+        });
+
+        const central = makeVillage("Central", "central", 0);
+        const villageA = makeVillage("Villa A", "a", 1);
+        allVillages = [central, villageA];
+        partyCentralKey = "central";
+        partySplitModeByVillage = {};
+        window.__recalcHits = 0;
+        window.__originalRecalc = recalc;
+        recalc = () => { window.__recalcHits += 1; };
+
+        renderPartyResult({
+          feasible: true,
+          totalPartyCount: 2,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: central,
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          centralReserve: withResourceTotal({ wood: 29700, clay: 33250, iron: 32000, crop: 6700 }),
+          villagePlans: [
+            { village: central, status: "Central", isCentralRow: true, counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }], deficit: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }) },
+            { village: villageA, status: "NPC", counts: [{ label:"GF", troopName:"Grandes fiestas", units:1 }], deficit: withResourceTotal({ wood: 100, clay: 100, iron: 100, crop: 100 }) }
+          ]
+        });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, '.training-row-delete-btn[data-village-key="central"]').click()
+    state = driver.execute_script(
+        """
+        const rowKeys = [...document.querySelectorAll('.training-transfer-table tbody tr')].map(row => row.getAttribute('data-village-key'));
+        const restore = window.__originalRecalc;
+        const result = {
+          rowKeys,
+          centralExcluded: allVillages.find(v => v.key === 'central').isExcluded,
+          centralKey: partyCentralKey,
+          recalcHits: window.__recalcHits
+        };
+        recalc = restore;
+        return result;
+        """
+    )
+
+    assert state["rowKeys"] == ["central", "a"], "NPC grandes fiestas no mostro la aldea central dentro de la lista inferior del plan"
+    assert state["centralExcluded"], "NPC grandes fiestas no permitio borrar la aldea central del plan"
+    assert state["centralKey"] == "central", "NPC grandes fiestas no debia cambiar la seleccion de aldea central al borrarla del plan"
+    assert state["recalcHits"] == 1, "Borrar la fila central no disparo el recalculo del plan"
 
 
 def test_npc_party_excludes_initial_zone_villages(driver, base_url):
@@ -1576,6 +1644,7 @@ def main():
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),
                 ("npc_party_excludes_initial_zone_villages", test_npc_party_excludes_initial_zone_villages),
+                ("npc_party_central_row_can_be_deleted_from_plan", test_npc_party_central_row_can_be_deleted_from_plan),
                 ("npc_party_split_buttons", test_npc_party_split_buttons),
                 ("npc_party_total_and_capacity_fit_columns", test_npc_party_total_and_capacity_fit_columns),
                 ("npc_party_delivered_and_delete_controls", test_npc_party_delivered_and_delete_controls),

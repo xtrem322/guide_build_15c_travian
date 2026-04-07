@@ -383,7 +383,11 @@ function getActiveDestinationVillages(){
 }
 
 function getExerciseVillages(){
-  return allVillages.filter(village => !village.isExcluded || village.key === partyCentralKey)
+  return allVillages.filter(village => !village.isExcluded)
+}
+
+function isVillageIncluded(village){
+  return Boolean(village && !village.isExcluded)
 }
 
 function getCentralNpcCapError(central, resources){
@@ -398,6 +402,7 @@ function getCentralNpcCapError(central, resources){
 }
 
 function getPartyRowStatus(plan){
+  if(plan?.isCentralRow) return "Central"
   if(n0(plan?.supportFromCentral?.total) > 0 && n0(plan?.supportFromVillages?.total) > 0) return "Envio + NPC"
   if(n0(plan?.supportFromCentral?.total) > 0) return "NPC"
   if(n0(plan?.supportFromVillages?.total) > 0) return "Envio"
@@ -411,9 +416,10 @@ function evaluatePartyPlan(){
   if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
 
   const activeVillages = getActiveDestinationVillages()
-  if(!activeVillages.length) return { feasible:false, reason:"No quedan aldeas destino para repartir." }
+  const centralIncluded = isVillageIncluded(central)
+  if(!activeVillages.length && !centralIncluded) return { feasible:false, reason:"No quedan aldeas en el ejercicio." }
 
-  const centralReserve = getPartyRequirementForVillage(central)
+  const centralReserve = centralIncluded ? getPartyRequirementForVillage(central) : zeroResources()
   if(n0(central.current?.total) < n0(centralReserve.total)){
     return {
       feasible:false,
@@ -483,6 +489,22 @@ function evaluatePartyPlan(){
     centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
   }
 
+  if(centralIncluded){
+    const centralPlan = {
+      village: central,
+      counts: buildPartyCountsForVillage(central),
+      required: getPartyRequirementForVillage(central),
+      deficit: zeroResources(),
+      deficitBeforeVillageSupport: zeroResources(),
+      surplus: zeroResources(),
+      supportFromVillages: zeroResources(),
+      supportFromCentral: zeroResources(),
+      isCentralRow: true,
+      status: "Central"
+    }
+    plans.push(centralPlan)
+  }
+
   const centralCapError = getCentralNpcCapError(central, centralNpcNeed)
   if(centralCapError) return { feasible:false, reason: centralCapError }
 
@@ -495,14 +517,14 @@ function evaluatePartyPlan(){
 
   return {
     feasible: true,
-    totalPartyCount: getConfiguredPartyCountTotal(activeVillages) + getVillagePartyCount(central),
+    totalPartyCount: getConfiguredPartyCountTotal(getExerciseVillages()),
     villagePlans: plans,
     totalTransfer: centralNpcNeed,
     villageTransfers,
     central,
     centralAvailable: withResourceTotal(central.current),
     centralReserve,
-    plannedVillages: activeVillages.length + 1
+    plannedVillages: getExerciseVillages().length
   }
 }
 
@@ -517,6 +539,7 @@ function renderSummary(plan){
   const activeVillages = getActiveDestinationVillages()
   const central = allVillages.find(village => village.key === partyCentralKey)
   const totalPartyCount = plan?.totalPartyCount ?? getConfiguredPartyCountTotal(getExerciseVillages())
+  const centralPartyCount = isVillageIncluded(central) ? getVillagePartyCount(central) : 0
 
   summary.style.display = "grid"
   summary.innerHTML = `
@@ -530,7 +553,7 @@ function renderSummary(plan){
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Fiestas central</div>
-      <div class="training-summary-value">${fmtInt(getVillagePartyCount(central))}</div>
+      <div class="training-summary-value">${fmtInt(centralPartyCount)}</div>
     </div>
     <div class="training-summary-card">
       <div class="training-summary-label">Fiestas totales</div>
@@ -583,7 +606,7 @@ function renderVillageTable(){
       : hasEnoughResources(village.current, requirement))
 
     let role = "Destino"
-    if(isCentral) role = "Central"
+    if(isCentral) role = village.isExcluded ? "Central excluida" : "Central"
     if(village.isInitialZone) role = "Excluida ZI"
     else if(village.isExcluded && !isCentral) role = "Excluida"
 
@@ -644,7 +667,8 @@ function updateCentralSelect(){
     return
   }
 
-  const reserve = getPartyRequirementForVillage(central)
+  const centralIncluded = isVillageIncluded(central)
+  const reserve = centralIncluded ? getPartyRequirementForVillage(central) : zeroResources()
   const recommendedKey = findRecommendedCentralKey()
   meta.innerHTML = `
     <div class="training-central-overview">
@@ -656,7 +680,7 @@ function updateCentralSelect(){
       <div class="training-central-card">
         <div class="training-central-card-label">Reserva fiestas</div>
         <div class="training-central-card-value">${fmtInt(reserve.total)}</div>
-        <div class="training-central-card-help">${fmtInt(getVillagePartyCount(central))} fiesta(s) propias: ${fmtInt(reserve.wood)} / ${fmtInt(reserve.clay)} / ${fmtInt(reserve.iron)} / ${fmtInt(reserve.crop)}</div>
+        <div class="training-central-card-help">${centralIncluded ? fmtInt(getVillagePartyCount(central)) : "0"} fiesta(s) propias: ${fmtInt(reserve.wood)} / ${fmtInt(reserve.clay)} / ${fmtInt(reserve.iron)} / ${fmtInt(reserve.crop)}${centralIncluded ? "" : " · La central esta fuera del plan."}</div>
       </div>
       <div class="training-central-card">
         <div class="training-central-card-label">Recursos actuales</div>
@@ -761,7 +785,7 @@ function setPartyVillageDelivered(villageKey, delivered){
 
 function excludePartyVillage(villageKey){
   const village = allVillages.find(item => item.key === villageKey)
-  if(!village || village.key === partyCentralKey) return
+  if(!village) return
   village.isExcluded = true
   delete partySplitModeByVillage[villageKey]
 }
@@ -968,10 +992,11 @@ function recalc(){
     return
   }
 
-  if(getActiveDestinationVillages().length === 0){
+  const central = allVillages.find(village => village.key === partyCentralKey)
+  if(getActiveDestinationVillages().length === 0 && !isVillageIncluded(central)){
     $("partyImportStatus").textContent = partyLastImportSummary
     renderPartyResult(null)
-    showStatus("No quedan aldeas destino para calcular. Usa otra central o vuelve a incluir aldeas.", "bad")
+    showStatus("No quedan aldeas en el ejercicio. Vuelve a incluir alguna aldea o cambia la central.", "bad")
     return
   }
 
@@ -981,7 +1006,7 @@ function recalc(){
 
   if(plan.feasible){
     $("partyImportStatus").textContent = `Fiestas totales: ${fmtInt(plan.totalPartyCount)} · Reserva central: ${fmtInt(plan.centralReserve.total)} · NPC central: ${fmtInt(plan.totalTransfer.total)}`
-    showStatus(`OK. Central: ${fmtInt(getVillagePartyCount(plan.central))} fiesta(s) · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
+    showStatus(`OK. Central en plan: ${isVillageIncluded(plan.central) ? "SI" : "NO"} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
   } else {
     $("partyImportStatus").textContent = partyLastImportSummary
     showStatus(plan.reason, "bad")
