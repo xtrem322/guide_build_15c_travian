@@ -593,9 +593,79 @@ def test_npc_training_central_total_and_village_transfers(driver, base_url):
     )
 
     assert result["feasible"], "NPC entrenamiento no considero a la central como bolsa total"
-    assert result["npcTotal"] == 100 and result["npcWood"] == 100 and result["npcIron"] == 0, "NPC entrenamiento no optimizo el faltante restante en la central"
-    assert len(result["transfers"]) == 2, "NPC entrenamiento no genero envios entre aldeas cuando habia excedentes utiles"
-    assert {item["status"] for item in result["statuses"]} == {"Envio", "NPC"}, "NPC entrenamiento no distinguio entre apoyo entre aldeas y NPC central"
+    assert result["npcTotal"] == 500 and result["npcWood"] == 300 and result["npcIron"] == 200, "NPC entrenamiento no dejo el faltante completo sobre la central cuando ella sola alcanzaba"
+    assert len(result["transfers"]) == 0, "NPC entrenamiento no debia generar envios entre aldeas mientras la central aun alcanzaba"
+    assert {item["status"] for item in result["statuses"]} == {"NPC"}, "NPC entrenamiento debia usar solo NPC central mientras la central no se agotara"
+
+
+def test_npc_training_uses_village_transfers_only_after_central_exhausts(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalGetTrainingRequirement = getTrainingRequirement;
+        const originalFindVillageCurrentTime = findVillageCurrentTime;
+        const originalGetTrainingCentralCandidates = getTrainingCentralCandidates;
+        try {
+          const fake = (name, key, current, isTraining) => ({
+            id: key,
+            name,
+            key,
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal(current),
+            hasResources: true,
+            barracksTroop: "X",
+            stableTroop: "Y",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0
+          });
+
+          allVillages = [
+            fake("Central", "central", { wood: 150, clay: 0, iron: 0, crop: 0 }, false),
+            fake("FA Aldea A", "a", { wood: 300, clay: 0, iron: 0, crop: 0 }, true),
+            fake("FR Aldea B", "b", { wood: 0, clay: 0, iron: 300, crop: 0 }, true)
+          ];
+          trainingVillages = allVillages.filter(v => v.isTraining);
+          trainingCentralKey = "central";
+
+          getTrainingRequirement = (village) => {
+            if (village.key === "a") return { queues:[{label:"C"}], counts:[{label:"C", units:10}], resources: withResourceTotal({ wood: 100, clay: 0, iron: 200, crop: 0 }) };
+            if (village.key === "b") return { queues:[{label:"E"}], counts:[{label:"E", units:10}], resources: withResourceTotal({ wood: 300, clay: 0, iron: 0, crop: 0 }) };
+            return { queues:[], counts:[], resources: zeroResources() };
+          };
+          findVillageCurrentTime = (village) => village.key === "a" ? 60 : 120;
+          getTrainingCentralCandidates = () => allVillages.slice();
+
+          const plan = evaluateTrainingTarget(300);
+          return {
+            feasible: plan.feasible,
+            npcTotal: plan.totalTransfer.total,
+            transfers: plan.villageTransfers,
+            statuses: plan.villagePlans.map(item => ({ name: item.village.name, status: item.status }))
+          };
+        } finally {
+          getTrainingRequirement = originalGetTrainingRequirement;
+          findVillageCurrentTime = originalFindVillageCurrentTime;
+          getTrainingCentralCandidates = originalGetTrainingCentralCandidates;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC entrenamiento debia permitir apoyo entre aldeas cuando la central ya no cubria todo"
+    assert result["npcTotal"] == 150, "NPC entrenamiento no debia seguir pidiendo mas NPC del que la central podia cubrir tras agotarse"
+    assert len(result["transfers"]) == 2, "NPC entrenamiento debia generar apoyo entre aldeas solo cuando la central se agotaba"
+    assert {item["status"] for item in result["statuses"]} == {"Envio + NPC"}, "NPC entrenamiento no distinguio correctamente el uso de la central agotada y el apoyo entre aldeas"
 
 
 def test_npc_training_central_capacity_cap(driver, base_url):
@@ -1630,6 +1700,7 @@ def main():
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
                 ("npc_training_import_preserves_resource_order", test_npc_training_import_preserves_resource_order),
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
+                ("npc_training_uses_village_transfers_only_after_central_exhausts", test_npc_training_uses_village_transfers_only_after_central_exhausts),
                 ("npc_training_central_capacity_cap", test_npc_training_central_capacity_cap),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("npc_training_central_overview_cards", test_npc_training_central_overview_cards),

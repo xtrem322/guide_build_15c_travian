@@ -603,36 +603,44 @@ function evaluateTrainingTarget(targetSec){
     return { feasible:false, reason:"Configura al menos una cola de entrenamiento." }
   }
 
+  const initialNpcNeed = plans.reduce((acc, plan) => addResources(acc, plan.deficitBeforeVillageSupport), zeroResources())
   const villageTransfers = []
-  for(const resource of RESOURCE_KEYS){
-    const donors = plans
-      .filter(item => n0(item.surplus?.[resource]) > 0)
-      .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
-    const receivers = plans
-      .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
-      .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+  let remainingVillageSupportNeed = Math.max(0, n0(initialNpcNeed.total) - n0(central.current?.total))
 
-    for(const receiver of receivers){
-      let missing = n0(receiver.deficitBeforeVillageSupport?.[resource])
-      for(const donor of donors){
-        if(donor.village.key === receiver.village.key || missing <= 0) continue
-        const available = n0(donor.surplus?.[resource])
-        if(available <= 0) continue
-        const amount = Math.min(available, missing)
-        donor.surplus[resource] -= amount
-        donor.surplus = withResourceTotal(donor.surplus)
-        receiver.deficitBeforeVillageSupport[resource] -= amount
-        receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
-        receiver.supportFromVillages[resource] += amount
-        receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
-        villageTransfers.push({
-          from: donor.village.name,
-          to: receiver.village.name,
-          resource,
-          amount
-        })
-        missing -= amount
+  if(remainingVillageSupportNeed > 0){
+    for(const resource of RESOURCE_KEYS){
+      const donors = plans
+        .filter(item => n0(item.surplus?.[resource]) > 0)
+        .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
+      const receivers = plans
+        .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
+        .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+
+      for(const receiver of receivers){
+        let missing = Math.min(n0(receiver.deficitBeforeVillageSupport?.[resource]), remainingVillageSupportNeed)
+        for(const donor of donors){
+          if(donor.village.key === receiver.village.key || missing <= 0 || remainingVillageSupportNeed <= 0) continue
+          const available = n0(donor.surplus?.[resource])
+          if(available <= 0) continue
+          const amount = Math.min(available, missing, remainingVillageSupportNeed)
+          donor.surplus[resource] -= amount
+          donor.surplus = withResourceTotal(donor.surplus)
+          receiver.deficitBeforeVillageSupport[resource] -= amount
+          receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
+          receiver.supportFromVillages[resource] += amount
+          receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
+          villageTransfers.push({
+            from: donor.village.name,
+            to: receiver.village.name,
+            resource,
+            amount
+          })
+          missing -= amount
+          remainingVillageSupportNeed -= amount
+        }
+        if(remainingVillageSupportNeed <= 0) break
       }
+      if(remainingVillageSupportNeed <= 0) break
     }
   }
 
@@ -641,7 +649,8 @@ function evaluateTrainingTarget(targetSec){
     plan.supportFromCentral = withResourceTotal(plan.deficitBeforeVillageSupport)
     plan.deficit = withResourceTotal(plan.deficitBeforeVillageSupport)
     centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
-    if(plan.supportFromCentral.total > 0) plan.status = "NPC"
+    if(plan.supportFromCentral.total > 0 && plan.supportFromVillages.total > 0) plan.status = "Envio + NPC"
+    else if(plan.supportFromCentral.total > 0) plan.status = "NPC"
     else if(plan.supportFromVillages.total > 0) plan.status = "Envio"
     else if(plan.counts.length) plan.status = "Lista"
   }
