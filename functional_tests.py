@@ -568,6 +568,35 @@ def test_npc_training_import_preserves_resource_order(driver, base_url):
     ], "La lista de aldea central no respeto el orden original del pegado de recursos"
 
 
+def test_npc_training_default_building_levels_start_at_20(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#trainingVillageBody tr")) == 4
+    )
+
+    first_row_values = driver.execute_script(
+        """
+        const row = document.querySelector('#trainingVillageBody tr');
+        const selects = row ? [...row.querySelectorAll('select.training-level-select')] : [];
+        return selects.slice(0, 3).map(item => item.value);
+        """
+    )
+
+    assert first_row_values == ["20", "20", "20"], "NPC entrenamiento no dejo los niveles de cuartel, establo y taller en 20 por defecto"
+
+
 def test_npc_training_central_total_and_village_transfers(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -1958,6 +1987,7 @@ def main():
                 ("npc_training_resources_parser", test_npc_training_resources_parser),
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
                 ("npc_training_import_preserves_resource_order", test_npc_training_import_preserves_resource_order),
+                ("npc_training_default_building_levels_start_at_20", test_npc_training_default_building_levels_start_at_20),
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("npc_training_uses_village_transfers_only_after_central_exhausts", test_npc_training_uses_village_transfers_only_after_central_exhausts),
                 ("npc_training_central_capacity_cap", test_npc_training_central_capacity_cap),
