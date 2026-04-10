@@ -170,6 +170,24 @@ function zeroResources(){
   return { wood:0, clay:0, iron:0, crop:0, total:0 }
 }
 
+function zeroTrainingQueueTimes(){
+  return { C:0, E:0, T:0, G:0 }
+}
+
+function withTrainingQueueTimes(times){
+  const asSec = (value) => {
+    const text = String(value ?? "").trim()
+    if(/^(\d+):(\d{2}):(\d{2})$/.test(text)) return parseTimeToSec(text)
+    return Math.max(0, Math.floor(n0(value)))
+  }
+  return {
+    C: asSec(times?.C),
+    E: asSec(times?.E),
+    T: asSec(times?.T),
+    G: asSec(times?.G)
+  }
+}
+
 function withResourceTotal(res){
   const next = {
     wood: Math.max(0, Math.floor(n0(res?.wood))),
@@ -398,13 +416,21 @@ function parseTrainingTimesRow(line){
 
   if(!tail.length) return null
 
+  const queueTimes = withTrainingQueueTimes({
+    C: tail[0],
+    E: tail[1],
+    T: tail[2],
+    G: tail[3]
+  })
+
   const name = cleanVillageNameText(tokens.slice(0, idx + 1).join(" "))
   if(!name || /^Village$/i.test(name) || /^Sum$/i.test(name)) return null
 
   return {
     name,
     key: normalizeVillageKey(name),
-    currentTrainingSec: tail.reduce((sum, token) => sum + parseTimeToSec(token), 0)
+    currentTrainingByQueue: queueTimes,
+    currentTrainingSec: queueTimes.C + queueTimes.E + queueTimes.T
   }
 }
 
@@ -442,6 +468,7 @@ function defaultTrainingVillage(data, previous){
     trooperBoost: 0,
     helmetBarracks: 0,
     helmetStable: 0,
+    currentTrainingByQueue: zeroTrainingQueueTimes(),
     currentTrainingSec: 0,
     isDelivered: false,
     isExcluded: false
@@ -456,6 +483,7 @@ function defaultTrainingVillage(data, previous){
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
     hasResources: Boolean(data.hasResources),
+    currentTrainingByQueue: withTrainingQueueTimes(data.currentTrainingByQueue ?? base.currentTrainingByQueue),
     currentTrainingSec: Math.max(0, Math.floor(n0(data.currentTrainingSec ?? base.currentTrainingSec))),
     isTraining: tag.isTraining,
     race: tag.race || base.race,
@@ -580,10 +608,26 @@ function getTrainingRequirement(village, targetSec){
   const queues = buildTrainingQueues(village)
   const required = zeroResources()
   const counts = []
+  const requestedTrainingByQueue = {}
+  const currentTrainingByQueue = {}
+  const equalizedByCurrent = isEqualTrainingTimeModeEnabled()
 
   for(const queue of queues){
-    const units = targetSec > 0 ? Math.ceil(targetSec / queue.secEach) : 0
-    counts.push({ label: queue.label, troopName: queue.troopName, units })
+    const currentQueueSec = equalizedByCurrent ? getQueueCurrentTrainingSec(village, queue.label) : 0
+    const requestedQueueSec = equalizedByCurrent
+      ? Math.max(0, Math.floor(n0(targetSec) - currentQueueSec))
+      : Math.max(0, Math.floor(n0(targetSec)))
+    const units = requestedQueueSec > 0 ? Math.ceil(requestedQueueSec / queue.secEach) : 0
+    currentTrainingByQueue[queue.label] = currentQueueSec
+    requestedTrainingByQueue[queue.label] = requestedQueueSec
+    counts.push({
+      label: queue.label,
+      troopName: queue.troopName,
+      units,
+      currentSec: currentQueueSec,
+      requestedSec: requestedQueueSec,
+      finalSec: equalizedByCurrent ? currentQueueSec + requestedQueueSec : requestedQueueSec
+    })
     required.wood += queue.cost.wood * units
     required.clay += queue.cost.clay * units
     required.iron += queue.cost.iron * units
@@ -591,7 +635,15 @@ function getTrainingRequirement(village, targetSec){
   }
 
   const resources = withResourceTotal(required)
-  return { queues, counts, resources }
+  return {
+    queues,
+    counts,
+    resources,
+    currentTrainingByQueue: withTrainingQueueTimes(currentTrainingByQueue),
+    requestedTrainingByQueue: withTrainingQueueTimes(requestedTrainingByQueue),
+    maxCurrentSec: counts.reduce((max, item) => Math.max(max, n0(item.currentSec)), 0),
+    maxRequestedSec: counts.reduce((max, item) => Math.max(max, n0(item.requestedSec)), 0)
+  }
 }
 
 function findVillageCurrentTime(village){
@@ -633,20 +685,16 @@ function evaluateTrainingTarget(targetSec){
   let activeQueues = 0
 
   for(const village of activeVillages){
-    const currentTrainingSec = getVillageCurrentTrainingSec(village)
-    const requestedTrainingSec = equalizedByCurrent
-      ? Math.max(0, Math.floor(n0(targetSec) - currentTrainingSec))
-      : targetSec
-    const currentTime = equalizedByCurrent ? currentTrainingSec : findVillageCurrentTime(village)
-    const req = getTrainingRequirement(village, requestedTrainingSec)
+    const req = getTrainingRequirement(village, targetSec)
+    const currentTime = equalizedByCurrent ? req.maxCurrentSec : findVillageCurrentTime(village)
 
     if(!req.queues.length){
       plans.push({
         village,
         currentTime,
-        currentTrainingSec,
-        requestedTrainingSec,
-        totalTargetSec: Math.max(currentTrainingSec, Math.floor(n0(targetSec))),
+        currentTrainingByQueue: zeroTrainingQueueTimes(),
+        requestedTrainingByQueue: zeroTrainingQueueTimes(),
+        totalTargetSec: Math.floor(n0(targetSec)),
         required: zeroResources(),
         deficit: zeroResources(),
         deficitBeforeVillageSupport: zeroResources(),
@@ -663,9 +711,9 @@ function evaluateTrainingTarget(targetSec){
     plans.push({
       village,
       currentTime,
-      currentTrainingSec,
-      requestedTrainingSec,
-      totalTargetSec: equalizedByCurrent ? Math.max(currentTrainingSec + requestedTrainingSec, currentTrainingSec) : targetSec,
+      currentTrainingByQueue: req.currentTrainingByQueue,
+      requestedTrainingByQueue: req.requestedTrainingByQueue,
+      totalTargetSec: Math.floor(n0(targetSec)),
       required: req.resources,
       deficit: zeroResources(),
       deficitBeforeVillageSupport: positiveDeficit(req.resources, village.current),
@@ -758,8 +806,9 @@ function evaluateTrainingTarget(targetSec){
 function findBestTrainingPlan(){
   const minTargetSec = isEqualTrainingTimeModeEnabled()
     ? getEffectiveTrainingVillages().reduce((max, village) => {
-      if(!buildTrainingQueues(village).length) return max
-      return Math.max(max, getVillageCurrentTrainingSec(village))
+      const queues = buildTrainingQueues(village)
+      if(!queues.length) return max
+      return queues.reduce((queueMax, queue) => Math.max(queueMax, getQueueCurrentTrainingSec(village, queue.label)), max)
     }, 0)
     : 0
   const base = evaluateTrainingTarget(minTargetSec)
@@ -838,8 +887,13 @@ function getVillageCurrentTrainingSec(village){
   return Math.max(0, Math.floor(n0(village?.currentTrainingSec)))
 }
 
+function getQueueCurrentTrainingSec(village, queueLabel){
+  return Math.max(0, Math.floor(n0(village?.currentTrainingByQueue?.[queueLabel])))
+}
+
 function syncTrainingTimesFromDom(){
   for(const village of allVillages){
+    village.currentTrainingByQueue = zeroTrainingQueueTimes()
     village.currentTrainingSec = 0
   }
 
@@ -875,11 +929,13 @@ function syncTrainingTimesFromDom(){
   let matchedCount = 0
   for(const village of allVillages){
     const row = map.get(village.key)
+    village.currentTrainingByQueue = withTrainingQueueTimes(row?.currentTrainingByQueue)
     village.currentTrainingSec = row ? row.currentTrainingSec : 0
     if(row) matchedCount += 1
   }
 
   const missingNames = getEffectiveTrainingVillages()
+    .filter(village => buildTrainingQueues(village).length > 0)
     .filter(village => !map.has(village.key))
     .map(village => village.name)
 
@@ -1064,7 +1120,7 @@ function renderTrainingSummary(plan){
       <div class="training-summary-value">${fmtInt(plan?.activeQueues || activeVillages)}</div>
     </div>
     <div class="training-summary-card">
-      <div class="training-summary-label">${equalizedByCurrent ? "Tiempo total comun" : "Tiempo comun"}</div>
+      <div class="training-summary-label">${equalizedByCurrent ? "Tiempo comun por edificio" : "Tiempo comun"}</div>
       <div class="training-summary-value">${fmtTime(plan?.targetSec || 0)}</div>
     </div>
   `
@@ -1408,7 +1464,7 @@ function renderTrainingResult(plan){
   wrap.style.display = "block"
   const centralRemainingTotal = Math.max(0, n0(plan.centralAvailable?.total) - n0(plan.totalTransfer?.total))
   const visibleVillagePlans = getRenderedVillagePlans(plan)
-  const timeLabel = plan.equalizedByCurrent ? "Tiempo total comun" : "Tiempo objetivo"
+  const timeLabel = plan.equalizedByCurrent ? "Tiempo comun por edificio" : "Tiempo objetivo"
 
   body.innerHTML = `
     <div class="training-result-meta">
@@ -1601,7 +1657,7 @@ function recalc(){
   renderTrainingResult(plan.feasible ? plan : null)
 
   if(plan.feasible){
-    const timeSummaryLabel = plan.equalizedByCurrent ? "Tiempo total comun" : "Tiempo comun"
+    const timeSummaryLabel = plan.equalizedByCurrent ? "Tiempo comun por edificio" : "Tiempo comun"
     const trainingSuffix = trainingTimeInfo.enabled ? ` · Tiempos vigentes: ${fmtInt(trainingTimeInfo.parsedCount)}` : ""
     $("trainingImportStatus").textContent = `${timeSummaryLabel}: ${fmtTime(plan.targetSec)} · NPC central: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(getEffectiveTrainingVillages().length)}${trainingSuffix}`
     showStatus(`OK. ${timeSummaryLabel}: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")

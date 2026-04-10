@@ -853,7 +853,8 @@ def test_npc_training_equalize_times_toggle_and_parser(driver, base_url):
         return parseTrainingTimesTable(arguments[0]).map(row => ({
           name: row.name,
           key: row.key,
-          sec: row.currentTrainingSec
+          sec: row.currentTrainingSec,
+          queues: row.currentTrainingByQueue
         }));
         """,
         TRAINING_TIMES_EXAMPLE
@@ -862,9 +863,9 @@ def test_npc_training_equalize_times_toggle_and_parser(driver, base_url):
     parsed_by_key = {item["key"]: item for item in parsed}
 
     assert parsed_by_key["fh villa esperanza"]["sec"] == 0, "El parser de Training no tomo los puntos como tiempo cero"
-    assert parsed_by_key["fr ojitos rojos"]["sec"] == 5475, "El parser de Training no sumo correctamente los tiempos vigentes de una aldea"
-    assert parsed_by_key["fga villa emocion"]["sec"] == 7378, "El parser de Training no reconocio correctamente horas completas"
-    assert parsed_by_key["fge villa charizard"]["sec"] == 226, "El parser de Training no reconocio correctamente un tiempo corto"
+    assert parsed_by_key["fr ojitos rojos"]["queues"] == {"C": 1007, "E": 4468, "T": 0, "G": 0}, "El parser de Training no separo correctamente cuartel y establo"
+    assert parsed_by_key["fga villa emocion"]["queues"] == {"C": 7378, "E": 0, "T": 0, "G": 0}, "El parser de Training no reconocio correctamente el tiempo del cuartel"
+    assert parsed_by_key["fge villa charizard"]["queues"] == {"C": 226, "E": 0, "T": 0, "G": 0}, "El parser de Training no reconocio correctamente un tiempo corto"
 
 
 def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
@@ -873,27 +874,28 @@ def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
 
     result = driver.execute_script(
         """
-        const originalGetTrainingRequirement = getTrainingRequirement;
+        const originalBuildTrainingQueues = buildTrainingQueues;
         const checkbox = document.getElementById('equalizeTrainingTimes');
         const previousChecked = checkbox.checked;
         try {
           checkbox.checked = true;
 
-          const makeVillage = (name, key, currentTrainingSec, current, isTraining) => ({
-            id: key,
-            name,
-            key,
+          const village = {
+            id: "a",
+            name: "FR Aldea A",
+            key: "a",
             race: "ROMANO",
             raceSupported: true,
-            isTraining,
+            isTraining: true,
             warehouseCap: 999999,
             granaryCap: 999999,
-            current: withResourceTotal(current),
-            currentTrainingSec,
+            current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+            currentTrainingSec: 180,
+            currentTrainingByQueue: { C: 120, E: 0, T: 60, G: 0 },
             hasResources: true,
-            barracksTroop: "X",
-            stableTroop: "",
-            workshopTroop: "",
+            barracksTroop: "Inf",
+            stableTroop: "Cab",
+            workshopTroop: "Arma",
             barracksLvl: 1,
             stableLvl: 1,
             workshopLvl: 1,
@@ -903,52 +905,37 @@ def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
             helmetStable: 0,
             isDelivered: false,
             isExcluded: false
-          });
+          };
 
-          allVillages = [
-            makeVillage("Central", "central", 0, { wood: 1000, clay: 0, iron: 0, crop: 0 }, false),
-            makeVillage("FR Aldea A", "a", 0, { wood: 0, clay: 0, iron: 0, crop: 0 }, true),
-            makeVillage("FR Aldea B", "b", 120, { wood: 0, clay: 0, iron: 0, crop: 0 }, true)
-          ];
-          trainingVillages = allVillages.filter(v => v.isTraining);
-          trainingCentralKey = "central";
+          buildTrainingQueues = () => ([
+            { label:"C", troopName:"Inf", secEach: 1, cost: withResourceTotal({ wood: 1, clay: 0, iron: 0, crop: 0 }) },
+            { label:"E", troopName:"Cab", secEach: 1, cost: withResourceTotal({ wood: 1, clay: 0, iron: 0, crop: 0 }) },
+            { label:"T", troopName:"Arma", secEach: 1, cost: withResourceTotal({ wood: 1, clay: 0, iron: 0, crop: 0 }) }
+          ]);
 
-          getTrainingRequirement = (village, targetSec) => ({
-            queues: [{ label:"C" }],
-            counts: [{ label:"C", troopName:"X", units: targetSec }],
-            resources: withResourceTotal({ wood: targetSec, clay: 0, iron: 0, crop: 0 })
-          });
-
-          const plan = evaluateTrainingTarget(300);
-          const villagePlans = Object.fromEntries(plan.villagePlans.map(item => [item.village.key, {
-            currentTrainingSec: item.currentTrainingSec,
-            requestedTrainingSec: item.requestedTrainingSec,
-            totalTargetSec: item.totalTargetSec,
-            wood: item.deficit.wood,
-            status: item.status
+          const req = getTrainingRequirement(village, 240);
+          const counts = Object.fromEntries(req.counts.map(item => [item.label, {
+            units: item.units,
+            currentSec: item.currentSec,
+            requestedSec: item.requestedSec,
+            finalSec: item.finalSec
           }]));
 
           return {
-            feasible: plan.feasible,
-            equalizedByCurrent: plan.equalizedByCurrent,
-            npcTotal: plan.totalTransfer.total,
-            villagePlans
+            npcTotal: req.resources.total,
+            counts
           };
         } finally {
-          getTrainingRequirement = originalGetTrainingRequirement;
+          buildTrainingQueues = originalBuildTrainingQueues;
           checkbox.checked = previousChecked;
         }
         """
     )
 
-    assert result["feasible"], "NPC entrenamiento no encontro plan viable al igualar tiempo actual mas tiempo nuevo"
-    assert result["equalizedByCurrent"], "NPC entrenamiento no activo el modo de igualar tiempos acumulados"
-    assert result["npcTotal"] == 480, "NPC entrenamiento no recalculo el NPC total con el tiempo vigente de cada aldea"
-    assert result["villagePlans"]["a"]["requestedTrainingSec"] == 300, "La aldea sin cola vigente debia completar todo el tiempo objetivo"
-    assert result["villagePlans"]["b"]["requestedTrainingSec"] == 180, "La aldea con cola vigente debia necesitar menos tiempo nuevo"
-    assert result["villagePlans"]["a"]["wood"] == 300 and result["villagePlans"]["b"]["wood"] == 180, "Los recursos NPC no siguieron el tiempo nuevo requerido por cada aldea"
-    assert result["villagePlans"]["a"]["totalTargetSec"] == 300 and result["villagePlans"]["b"]["totalTargetSec"] == 300, "El total final no quedo igualado entre aldeas"
-    assert {result["villagePlans"]["a"]["status"], result["villagePlans"]["b"]["status"]} == {"NPC"}, "El modo igualar tiempos no debia cambiar el estado de reparto base"
+    assert result["npcTotal"] == 540, "NPC entrenamiento no sumo correctamente el tiempo nuevo por edificio activo"
+    assert result["counts"]["C"] == {"units": 120, "currentSec": 120, "requestedSec": 120, "finalSec": 240}, "El cuartel no se igualo contra su tiempo vigente"
+    assert result["counts"]["E"] == {"units": 240, "currentSec": 0, "requestedSec": 240, "finalSec": 240}, "El establo no se igualo correctamente desde cero"
+    assert result["counts"]["T"] == {"units": 180, "currentSec": 60, "requestedSec": 180, "finalSec": 240}, "El taller no se igualo correctamente con su propio tiempo vigente"
 
 
 def test_npc_training_equalize_times_requires_training_block(driver, base_url):
@@ -1000,6 +987,72 @@ def test_npc_training_equalize_times_matches_training_names_without_colon(driver
     )
 
     assert "Faltan tiempos vigentes" not in driver.find_element(By.ID, "statusLine").text, "NPC entrenamiento no cruzo correctamente nombres con y sin dos puntos en el modo Igualar Tiempos"
+
+
+def test_npc_training_equalize_times_ignores_unconfigured_buildings(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalBuildTrainingQueues = buildTrainingQueues;
+        const checkbox = document.getElementById('equalizeTrainingTimes');
+        const previousChecked = checkbox.checked;
+        try {
+          checkbox.checked = true;
+
+          const village = {
+            id: "a",
+            name: "FR Aldea A",
+            key: "a",
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining: true,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+            currentTrainingSec: 3720,
+            currentTrainingByQueue: { C: 120, E: 3600, T: 0, G: 0 },
+            hasResources: true,
+            barracksTroop: "Inf",
+            stableTroop: "",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0,
+            isDelivered: false,
+            isExcluded: false
+          };
+
+          buildTrainingQueues = () => ([
+            { label:"C", troopName:"Inf", secEach: 1, cost: withResourceTotal({ wood: 1, clay: 0, iron: 0, crop: 0 }) }
+          ]);
+
+          const req = getTrainingRequirement(village, 240);
+          return {
+            npcTotal: req.resources.total,
+            counts: req.counts
+          };
+        } finally {
+          buildTrainingQueues = originalBuildTrainingQueues;
+          checkbox.checked = previousChecked;
+        }
+        """
+    )
+
+    assert result["npcTotal"] == 120, "NPC entrenamiento tomo en cuenta edificios no configurados al igualar tiempos"
+    assert result["counts"] == [{
+        "label": "C",
+        "troopName": "Inf",
+        "units": 120,
+        "currentSec": 120,
+        "requestedSec": 120,
+        "finalSec": 240
+    }], "NPC entrenamiento no debio usar el tiempo viejo del establo si esa cola no estaba configurada"
 
 
 def test_npc_training_split_buttons(driver, base_url):
@@ -1914,6 +1967,7 @@ def main():
                 ("npc_training_equalizes_current_plus_new_time", test_npc_training_equalizes_current_plus_new_time),
                 ("npc_training_equalize_times_requires_training_block", test_npc_training_equalize_times_requires_training_block),
                 ("npc_training_equalize_times_matches_training_names_without_colon", test_npc_training_equalize_times_matches_training_names_without_colon),
+                ("npc_training_equalize_times_ignores_unconfigured_buildings", test_npc_training_equalize_times_ignores_unconfigured_buildings),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
