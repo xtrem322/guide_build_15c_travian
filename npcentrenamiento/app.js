@@ -233,6 +233,7 @@ function normalizeVillageKey(name){
   return fixCommonMojibake(name)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[:\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
@@ -361,6 +362,70 @@ function parseTravianTable(raw, rowParser, type){
   return rows
 }
 
+function isTrainingTimeToken(token){
+  return /^(\d+):(\d{2}):(\d{2})$/.test(String(token || "").trim()) || /^(?:-|\u2022)$/u.test(String(token || "").trim())
+}
+
+function findTrainingTimesStart(lines){
+  let sawTraining = false
+
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i]
+    if(/^Training$/i.test(line)){
+      sawTraining = true
+      continue
+    }
+    if(sawTraining && /^Village\b/i.test(line)) return i + 1
+  }
+
+  for(let i = 0; i < lines.length; i++){
+    if(/^Village\b/i.test(lines[i])) return i + 1
+  }
+
+  return 0
+}
+
+function parseTrainingTimesRow(line){
+  const tokens = String(line || "").trim().split(/\s+/).filter(Boolean)
+  if(tokens.length < 2) return null
+
+  const tail = []
+  let idx = tokens.length - 1
+  while(idx >= 0 && tail.length < 4 && isTrainingTimeToken(tokens[idx])){
+    tail.unshift(tokens[idx])
+    idx -= 1
+  }
+
+  if(!tail.length) return null
+
+  const name = cleanVillageNameText(tokens.slice(0, idx + 1).join(" "))
+  if(!name || /^Village$/i.test(name) || /^Sum$/i.test(name)) return null
+
+  return {
+    name,
+    key: normalizeVillageKey(name),
+    currentTrainingSec: tail.reduce((sum, token) => sum + parseTimeToSec(token), 0)
+  }
+}
+
+function parseTrainingTimesTable(raw){
+  const lines = pasteLines(raw)
+  const startIdx = findTrainingTimesStart(lines)
+  const scoped = lines.slice(startIdx)
+  const rows = []
+  const seen = new Set()
+
+  for(const line of scoped){
+    if(shouldStopTravianTable(line)) break
+    const row = parseTrainingTimesRow(line)
+    if(!row || seen.has(row.key)) continue
+    seen.add(row.key)
+    rows.push(row)
+  }
+
+  return rows
+}
+
 function defaultTrainingVillage(data, previous){
   const tag = parseVillageTrainingTag(data.name)
   const base = previous ? { ...previous } : {
@@ -377,6 +442,7 @@ function defaultTrainingVillage(data, previous){
     trooperBoost: 0,
     helmetBarracks: 0,
     helmetStable: 0,
+    currentTrainingSec: 0,
     isDelivered: false,
     isExcluded: false
   }
@@ -390,6 +456,7 @@ function defaultTrainingVillage(data, previous){
     granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
     current: withResourceTotal(data.current),
     hasResources: Boolean(data.hasResources),
+    currentTrainingSec: Math.max(0, Math.floor(n0(data.currentTrainingSec ?? base.currentTrainingSec))),
     isTraining: tag.isTraining,
     race: tag.race || base.race,
     raceSupported: tag.raceSupported
@@ -561,17 +628,25 @@ function evaluateTrainingTarget(targetSec){
   const central = allVillages.find(v => v.key === trainingCentralKey)
   if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
 
+  const equalizedByCurrent = isEqualTrainingTimeModeEnabled()
   const plans = []
   let activeQueues = 0
 
   for(const village of activeVillages){
-    const currentTime = findVillageCurrentTime(village)
-    const req = getTrainingRequirement(village, targetSec)
+    const currentTrainingSec = getVillageCurrentTrainingSec(village)
+    const requestedTrainingSec = equalizedByCurrent
+      ? Math.max(0, Math.floor(n0(targetSec) - currentTrainingSec))
+      : targetSec
+    const currentTime = equalizedByCurrent ? currentTrainingSec : findVillageCurrentTime(village)
+    const req = getTrainingRequirement(village, requestedTrainingSec)
 
     if(!req.queues.length){
       plans.push({
         village,
         currentTime,
+        currentTrainingSec,
+        requestedTrainingSec,
+        totalTargetSec: Math.max(currentTrainingSec, Math.floor(n0(targetSec))),
         required: zeroResources(),
         deficit: zeroResources(),
         deficitBeforeVillageSupport: zeroResources(),
@@ -588,6 +663,9 @@ function evaluateTrainingTarget(targetSec){
     plans.push({
       village,
       currentTime,
+      currentTrainingSec,
+      requestedTrainingSec,
+      totalTargetSec: equalizedByCurrent ? Math.max(currentTrainingSec + requestedTrainingSec, currentTrainingSec) : targetSec,
       required: req.resources,
       deficit: zeroResources(),
       deficitBeforeVillageSupport: positiveDeficit(req.resources, village.current),
@@ -667,6 +745,7 @@ function evaluateTrainingTarget(targetSec){
   return {
     feasible: true,
     targetSec,
+    equalizedByCurrent,
     villagePlans: plans,
     totalTransfer: centralNpcNeed,
     villageTransfers,
@@ -677,12 +756,18 @@ function evaluateTrainingTarget(targetSec){
 }
 
 function findBestTrainingPlan(){
-  const base = evaluateTrainingTarget(0)
+  const minTargetSec = isEqualTrainingTimeModeEnabled()
+    ? getEffectiveTrainingVillages().reduce((max, village) => {
+      if(!buildTrainingQueues(village).length) return max
+      return Math.max(max, getVillageCurrentTrainingSec(village))
+    }, 0)
+    : 0
+  const base = evaluateTrainingTarget(minTargetSec)
   if(!base.feasible) return base
 
   let best = base
-  let lo = 0
-  let hi = 3600
+  let lo = minTargetSec
+  let hi = Math.max(minTargetSec + 3600, 3600)
   const maxSec = 60 * 60 * 24 * 30
 
   while(hi < maxSec){
@@ -738,6 +823,78 @@ function syncGlobalTrainingConfigFromDom(){
   trainingGlobalConfig.helmetEnabled = Boolean($("globalHelmetEnabled")?.checked)
   trainingGlobalConfig.helmetBarracks = Number($("globalHelmetBarracks")?.value || 0)
   trainingGlobalConfig.helmetStable = Number($("globalHelmetStable")?.value || 0)
+}
+
+function isEqualTrainingTimeModeEnabled(){
+  return Boolean($("equalizeTrainingTimes")?.checked)
+}
+
+function refreshTrainingTimeModeControls(){
+  const wrap = $("trainingTimesWrap")
+  if(wrap) wrap.style.display = isEqualTrainingTimeModeEnabled() ? "" : "none"
+}
+
+function getVillageCurrentTrainingSec(village){
+  return Math.max(0, Math.floor(n0(village?.currentTrainingSec)))
+}
+
+function syncTrainingTimesFromDom(){
+  for(const village of allVillages){
+    village.currentTrainingSec = 0
+  }
+
+  if(!isEqualTrainingTimeModeEnabled()){
+    return { enabled:false, ok:true, parsedCount:0, matchedCount:0, missingNames:[] }
+  }
+
+  const raw = $("trainingTimesInput")?.value || ""
+  if(!raw.trim()){
+    return {
+      enabled:true,
+      ok:false,
+      parsedCount:0,
+      matchedCount:0,
+      missingNames: [],
+      reason:"Marca Igualar Tiempos y pega el bloque Training con los tiempos actuales."
+    }
+  }
+
+  const rows = parseTrainingTimesTable(raw)
+  if(!rows.length){
+    return {
+      enabled:true,
+      ok:false,
+      parsedCount:0,
+      matchedCount:0,
+      missingNames: [],
+      reason:"No se reconocieron filas validas en el bloque Training."
+    }
+  }
+
+  const map = new Map(rows.map(row => [row.key, row]))
+  let matchedCount = 0
+  for(const village of allVillages){
+    const row = map.get(village.key)
+    village.currentTrainingSec = row ? row.currentTrainingSec : 0
+    if(row) matchedCount += 1
+  }
+
+  const missingNames = getEffectiveTrainingVillages()
+    .filter(village => !map.has(village.key))
+    .map(village => village.name)
+
+  if(missingNames.length){
+    return {
+      enabled:true,
+      ok:false,
+      parsedCount: rows.length,
+      matchedCount,
+      missingNames,
+      reason:`Faltan tiempos vigentes para: ${missingNames.join(", ")}.`
+    }
+  }
+
+  return { enabled:true, ok:true, parsedCount: rows.length, matchedCount, missingNames: [] }
 }
 
 function renderTrainingHeader(){
@@ -891,6 +1048,7 @@ function renderTrainingSummary(plan){
 
   const effectiveVillages = getEffectiveTrainingVillages()
   const activeVillages = effectiveVillages.filter(v => buildTrainingQueues(v).length > 0).length
+  const equalizedByCurrent = Boolean(plan?.equalizedByCurrent || isEqualTrainingTimeModeEnabled())
   summary.style.display = "grid"
   summary.innerHTML = `
     <div class="training-summary-card">
@@ -906,7 +1064,7 @@ function renderTrainingSummary(plan){
       <div class="training-summary-value">${fmtInt(plan?.activeQueues || activeVillages)}</div>
     </div>
     <div class="training-summary-card">
-      <div class="training-summary-label">Tiempo comun</div>
+      <div class="training-summary-label">${equalizedByCurrent ? "Tiempo total comun" : "Tiempo comun"}</div>
       <div class="training-summary-value">${fmtTime(plan?.targetSec || 0)}</div>
     </div>
   `
@@ -1250,6 +1408,7 @@ function renderTrainingResult(plan){
   wrap.style.display = "block"
   const centralRemainingTotal = Math.max(0, n0(plan.centralAvailable?.total) - n0(plan.totalTransfer?.total))
   const visibleVillagePlans = getRenderedVillagePlans(plan)
+  const timeLabel = plan.equalizedByCurrent ? "Tiempo total comun" : "Tiempo objetivo"
 
   body.innerHTML = `
     <div class="training-result-meta">
@@ -1258,7 +1417,7 @@ function renderTrainingResult(plan){
         <div class="training-summary-value">${plan.central.name}</div>
       </div>
       <div class="training-summary-card">
-        <div class="training-summary-label">Tiempo objetivo</div>
+        <div class="training-summary-label">${timeLabel}</div>
         <div class="training-summary-value">${fmtTime(plan.targetSec)}</div>
       </div>
       <div class="training-summary-card">
@@ -1299,7 +1458,7 @@ function renderTrainingResult(plan){
           <th>Entregado?</th>
           <th class="left">Aldea</th>
           <th>Estado</th>
-          <th>Tiempo objetivo</th>
+          <th>${timeLabel}</th>
           <th>Colas</th>
           <th>${renderResourceLabel("wood")}</th>
           <th>${renderResourceLabel("clay")}</th>
@@ -1326,7 +1485,7 @@ function renderTrainingResult(plan){
               </td>
               <td class="left"><span class="training-village-name">${item.village.name}</span></td>
               <td class="${item.status === "NPC" || item.status === "Envio" ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
-              <td>${item.counts.length ? fmtTime(plan.targetSec) : "-"}</td>
+              <td>${item.counts.length ? fmtTime(item.totalTargetSec ?? plan.targetSec) : "-"}</td>
               <td>
                 <div class="split-cell-main">${queueCountLabelWithSplit(item.counts, splitFactor)}</div>
                 ${renderSplitButtons(item.village.key)}
@@ -1397,6 +1556,7 @@ function renderTrainingResult(plan){
 
 function recalc(){
   updateTrainingCentralSelect()
+  refreshTrainingTimeModeControls()
   renderTrainingVillageTable()
 
   if(!allVillages.length){
@@ -1427,13 +1587,24 @@ function recalc(){
     return
   }
 
+  const trainingTimeInfo = syncTrainingTimesFromDom()
+  if(!trainingTimeInfo.ok){
+    $("trainingImportStatus").textContent = trainingLastImportSummary
+    renderTrainingSummary(null)
+    renderTrainingResult(null)
+    showStatus(trainingTimeInfo.reason, "bad")
+    return
+  }
+
   const plan = findBestTrainingPlan()
   renderTrainingSummary(plan.feasible ? plan : null)
   renderTrainingResult(plan.feasible ? plan : null)
 
   if(plan.feasible){
-    $("trainingImportStatus").textContent = `Tiempo comun: ${fmtTime(plan.targetSec)} · NPC central: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(getEffectiveTrainingVillages().length)}`
-    showStatus(`OK. Tiempo comun: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
+    const timeSummaryLabel = plan.equalizedByCurrent ? "Tiempo total comun" : "Tiempo comun"
+    const trainingSuffix = trainingTimeInfo.enabled ? ` · Tiempos vigentes: ${fmtInt(trainingTimeInfo.parsedCount)}` : ""
+    $("trainingImportStatus").textContent = `${timeSummaryLabel}: ${fmtTime(plan.targetSec)} · NPC central: ${fmtInt(plan.totalTransfer.total)} · Aldeas: ${fmtInt(getEffectiveTrainingVillages().length)}${trainingSuffix}`
+    showStatus(`OK. ${timeSummaryLabel}: ${fmtTime(plan.targetSec)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`, "ok")
   } else {
     $("trainingImportStatus").textContent = trainingLastImportSummary
     showStatus(plan.reason, "bad")
@@ -1452,6 +1623,7 @@ async function init(){
 
   syncGlobalTrainingConfigFromDom()
   refreshGlobalTrainingControls()
+  refreshTrainingTimeModeControls()
 
   $("serverSpeed").addEventListener("change", recalc)
   $("globalAllianceBonus").addEventListener("change", () => {
@@ -1480,6 +1652,11 @@ async function init(){
     syncGlobalTrainingConfigFromDom()
     recalc()
   })
+  $("equalizeTrainingTimes").addEventListener("change", () => {
+    refreshTrainingTimeModeControls()
+    recalc()
+  })
+  $("trainingTimesInput").addEventListener("input", recalc)
   $("btnImportTraining").addEventListener("click", () => {
     const info = importTrainingVillages()
     if(info.mergedCount > 0){

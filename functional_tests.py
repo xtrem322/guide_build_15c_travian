@@ -195,6 +195,31 @@ Homepage Discord News Support Game rules Terms Imprint
 Â© 2004 - 2026 Travian Games GmbH
 """
 
+TRAINING_TIMES_EXAMPLE = """Privacy settings
+2
+Village overview
+Overview
+Resources
+Culture points
+Troops
+
+Training
+Village Barracks Stable Workshop Great Barracks
+ZI Villa Zero 1:49:12 • • -
+ZI 001 • 2:56:20 • -
+ZI 002 0:19:28 • • -
+Villa Pokemon - - - -
+Villa Tormento - - - -
+FH Villa Esperanza • • • •
+FR Ojitos Rojos 0:16:47 1:14:28 - -
+FGA Villa EmociÃ³n 2:02:58 • - -
+FGE Villa Charizard 0:03:46 • - -
+Team_Tocabolus
+Population: 223
+Loyalty: 100%
+Villages 13/14
+"""
+
 TRAINING_NAME_REPLACEMENTS = {
     "Villa Esperanza": "FH: Villa Esperanza",
     "Villa EmociÃ³n": "FGA: Villa EmociÃ³n",
@@ -812,6 +837,169 @@ def test_npc_training_central_overview_cards(driver, base_url):
     ], "La seccion de aldea central no quedo separada en bloques entendibles"
     assert values[0] == "Villa Tormento", "La tarjeta principal de aldea central no mostro la aldea seleccionada"
     assert values[3] == "946460", "La tarjeta de total disponible no mostro la suma de recursos de la central"
+
+
+def test_npc_training_equalize_times_toggle_and_parser(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    assert not driver.find_element(By.ID, "trainingTimesWrap").is_displayed(), "El bloque de Training no debia mostrarse antes del check"
+
+    driver.find_element(By.ID, "equalizeTrainingTimes").click()
+    WebDriverWait(driver, 10).until(lambda d: d.find_element(By.ID, "trainingTimesWrap").is_displayed())
+
+    parsed = driver.execute_script(
+        """
+        return parseTrainingTimesTable(arguments[0]).map(row => ({
+          name: row.name,
+          key: row.key,
+          sec: row.currentTrainingSec
+        }));
+        """,
+        TRAINING_TIMES_EXAMPLE
+    )
+
+    parsed_by_key = {item["key"]: item for item in parsed}
+
+    assert parsed_by_key["fh villa esperanza"]["sec"] == 0, "El parser de Training no tomo los puntos como tiempo cero"
+    assert parsed_by_key["fr ojitos rojos"]["sec"] == 5475, "El parser de Training no sumo correctamente los tiempos vigentes de una aldea"
+    assert parsed_by_key["fga villa emocion"]["sec"] == 7378, "El parser de Training no reconocio correctamente horas completas"
+    assert parsed_by_key["fge villa charizard"]["sec"] == 226, "El parser de Training no reconocio correctamente un tiempo corto"
+
+
+def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalGetTrainingRequirement = getTrainingRequirement;
+        const checkbox = document.getElementById('equalizeTrainingTimes');
+        const previousChecked = checkbox.checked;
+        try {
+          checkbox.checked = true;
+
+          const makeVillage = (name, key, currentTrainingSec, current, isTraining) => ({
+            id: key,
+            name,
+            key,
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining,
+            warehouseCap: 999999,
+            granaryCap: 999999,
+            current: withResourceTotal(current),
+            currentTrainingSec,
+            hasResources: true,
+            barracksTroop: "X",
+            stableTroop: "",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0,
+            isDelivered: false,
+            isExcluded: false
+          });
+
+          allVillages = [
+            makeVillage("Central", "central", 0, { wood: 1000, clay: 0, iron: 0, crop: 0 }, false),
+            makeVillage("FR Aldea A", "a", 0, { wood: 0, clay: 0, iron: 0, crop: 0 }, true),
+            makeVillage("FR Aldea B", "b", 120, { wood: 0, clay: 0, iron: 0, crop: 0 }, true)
+          ];
+          trainingVillages = allVillages.filter(v => v.isTraining);
+          trainingCentralKey = "central";
+
+          getTrainingRequirement = (village, targetSec) => ({
+            queues: [{ label:"C" }],
+            counts: [{ label:"C", troopName:"X", units: targetSec }],
+            resources: withResourceTotal({ wood: targetSec, clay: 0, iron: 0, crop: 0 })
+          });
+
+          const plan = evaluateTrainingTarget(300);
+          const villagePlans = Object.fromEntries(plan.villagePlans.map(item => [item.village.key, {
+            currentTrainingSec: item.currentTrainingSec,
+            requestedTrainingSec: item.requestedTrainingSec,
+            totalTargetSec: item.totalTargetSec,
+            wood: item.deficit.wood,
+            status: item.status
+          }]));
+
+          return {
+            feasible: plan.feasible,
+            equalizedByCurrent: plan.equalizedByCurrent,
+            npcTotal: plan.totalTransfer.total,
+            villagePlans
+          };
+        } finally {
+          getTrainingRequirement = originalGetTrainingRequirement;
+          checkbox.checked = previousChecked;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC entrenamiento no encontro plan viable al igualar tiempo actual mas tiempo nuevo"
+    assert result["equalizedByCurrent"], "NPC entrenamiento no activo el modo de igualar tiempos acumulados"
+    assert result["npcTotal"] == 480, "NPC entrenamiento no recalculo el NPC total con el tiempo vigente de cada aldea"
+    assert result["villagePlans"]["a"]["requestedTrainingSec"] == 300, "La aldea sin cola vigente debia completar todo el tiempo objetivo"
+    assert result["villagePlans"]["b"]["requestedTrainingSec"] == 180, "La aldea con cola vigente debia necesitar menos tiempo nuevo"
+    assert result["villagePlans"]["a"]["wood"] == 300 and result["villagePlans"]["b"]["wood"] == 180, "Los recursos NPC no siguieron el tiempo nuevo requerido por cada aldea"
+    assert result["villagePlans"]["a"]["totalTargetSec"] == 300 and result["villagePlans"]["b"]["totalTargetSec"] == 300, "El total final no quedo igualado entre aldeas"
+    assert {result["villagePlans"]["a"]["status"], result["villagePlans"]["b"]["status"]} == {"NPC"}, "El modo igualar tiempos no debia cambiar el estado de reparto base"
+
+
+def test_npc_training_equalize_times_requires_training_block(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    driver.find_element(By.ID, "equalizeTrainingTimes").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Marca Igualar Tiempos" in d.find_element(By.ID, "statusLine").text
+    )
+
+    assert not driver.find_element(By.ID, "trainingResultWrap").is_displayed(), "No debia mostrarse un plan si el bloque Training aun no se habia pegado"
+
+
+def test_npc_training_equalize_times_matches_training_names_without_colon(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE)
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE)
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    driver.find_element(By.ID, "equalizeTrainingTimes").click()
+    driver.execute_script(
+        "document.getElementById('trainingTimesInput').value = arguments[0];"
+        "document.getElementById('trainingTimesInput').dispatchEvent(new Event('input', { bubbles: true }));",
+        TRAINING_TIMES_EXAMPLE
+    )
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Configura al menos una cola de entrenamiento." in d.find_element(By.ID, "statusLine").text
+    )
+
+    assert "Faltan tiempos vigentes" not in driver.find_element(By.ID, "statusLine").text, "NPC entrenamiento no cruzo correctamente nombres con y sin dos puntos en el modo Igualar Tiempos"
 
 
 def test_npc_training_split_buttons(driver, base_url):
@@ -1722,6 +1910,10 @@ def main():
                 ("npc_training_central_capacity_cap", test_npc_training_central_capacity_cap),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("npc_training_central_overview_cards", test_npc_training_central_overview_cards),
+                ("npc_training_equalize_times_toggle_and_parser", test_npc_training_equalize_times_toggle_and_parser),
+                ("npc_training_equalizes_current_plus_new_time", test_npc_training_equalizes_current_plus_new_time),
+                ("npc_training_equalize_times_requires_training_block", test_npc_training_equalize_times_requires_training_block),
+                ("npc_training_equalize_times_matches_training_names_without_colon", test_npc_training_equalize_times_matches_training_names_without_colon),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),

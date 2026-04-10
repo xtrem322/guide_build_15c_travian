@@ -357,6 +357,18 @@ select,input{
   margin-bottom:12px;
 }
 
+.training-time-mode{
+  margin-bottom:12px;
+}
+
+.training-inline-check-boxed{
+  min-height:auto;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--panel);
+}
+
 .training-import-status{
   color:var(--muted);
   font-weight:700;
