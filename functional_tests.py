@@ -418,6 +418,23 @@ def test_npc_training_capacity_parser(driver, base_url):
     assert by_name["Villa Tormento"]["granaryCap"] == 880000, "Villa Tormento no parseo granero"
 
 
+def test_npc_training_usage_guide(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    titles = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, ".mode-panel .mode-title")
+    ]
+    notes = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, ".mode-panel .training-note")
+    ]
+
+    assert "Instructivo de uso" in titles, "NPC entrenamiento no mostro el bloque instructivo al final"
+    assert any("FGE" in note and "germano" in note.lower() for note in notes), "NPC entrenamiento no incluyo la referencia de siglas de raza en el instructivo"
+
+
 def test_npc_training_capacity_import_without_resources(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -1695,6 +1712,7 @@ def main():
                 ("roi", test_roi),
                 ("npc", test_npc),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
+                ("npc_training_usage_guide", test_npc_training_usage_guide),
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
                 ("npc_training_resources_parser", test_npc_training_resources_parser),
                 ("npc_training_capacity_and_resources_import", test_npc_training_capacity_and_resources_import),
