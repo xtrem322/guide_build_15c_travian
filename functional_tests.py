@@ -976,15 +976,18 @@ def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_
     driver.find_element(By.ID, "btnImportTraining").click()
 
     central_select = Select(driver.find_element(By.ID, "trainingCentralVillage"))
+    central_options = [option.text.strip() for option in central_select.options]
     selected_text = central_select.first_selected_option.text.strip()
     market_options = [option.text.strip() for option in Select(driver.find_element(By.ID, "globalMarketBonus")).options]
     office_level = Select(driver.find_element(By.ID, "trainingTradeOfficeLevel")).first_selected_option.text.strip()
     central_meta = driver.find_element(By.ID, "trainingCentralMeta").text
 
+    assert central_options == ["[Central] Villa Tormento - Total 946460"], "Si hay centrales detectadas, el combo no debe listar aldeas normales"
     assert selected_text.startswith("[Central] Villa Tormento"), "NPC entrenamiento no auto selecciono la central marcada con prefijo C"
     assert market_options == ["0%", "30%", "60%", "90%", "120%", "150%"], "NPC entrenamiento no agrego las opciones del bono de mercado"
     assert office_level == "20", "La oficina de comercio no debia iniciar en nivel 20"
     assert "EGIPTO" in central_meta, "NPC entrenamiento no mostro la raza de la central detectada"
+    assert "(84|-165)" in central_meta, "NPC entrenamiento no mostro las coordenadas parseadas de la central"
 
 
 def test_npc_training_equalize_times_toggle_and_parser(driver, base_url):
@@ -1210,6 +1213,7 @@ def test_npc_training_split_buttons(driver, base_url):
     driver.execute_script(
         """
         trainingSplitModeByVillage = {};
+        trainingLastGeneratedLinks = [];
         renderTrainingResult({
           feasible: true,
           targetSec: 120,
@@ -1228,6 +1232,9 @@ def test_npc_training_split_buttons(driver, base_url):
         });
         """
     )
+
+    assert driver.find_element(By.ID, "btnCalculateTrainingLinks").is_displayed(), "El boton Calcular links no se renderizo dentro del plan"
+    assert driver.find_element(By.ID, "btnOpenAllTrainingLinks").is_displayed(), "El boton Abrir todo no se renderizo dentro del plan"
 
     driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
     labels_after_2 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]

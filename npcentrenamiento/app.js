@@ -355,22 +355,47 @@ function parseCapacityRow(line){
 
 function parseVillageCoordinates(raw){
   const lines = pasteLines(raw)
+  const groupsStart = lines.findIndex(line => /^Village groups/i.test(line))
+  const scoped = groupsStart >= 0 ? lines.slice(groupsStart + 1) : lines
   const coordsByKey = new Map()
+  let pendingName = ""
 
-  for(let i = 0; i < lines.length - 1; i++){
-    const nameLine = cleanVillageNameText(lines[i])
-    if(!nameLine || /^(Village|Sum|Population|Loyalty|Capacity|Warehouse|Production|Resources|Village groups|Task overview|Homepage)$/i.test(nameLine)) continue
-    const coordMatch = lines[i + 1].match(/\((-?\d+)\|(-?\d+)\)/)
-    if(!coordMatch) continue
-    const tag = parseVillageTrainingTag(nameLine)
-    const displayName = tag.displayName || nameLine
-    const key = normalizeVillageKey(displayName)
-    if(coordsByKey.has(key)) continue
-    coordsByKey.set(key, {
-      key,
-      x: Number(coordMatch[1]),
-      y: Number(coordMatch[2])
-    })
+  const parseCoordinateLine = (line) => {
+    const compact = cleanTravianPaste(line)
+      .replace(/[−‒–—﹣－]/g, "-")
+      .replace(/[^\d|()\-+]/g, "")
+      .replace(/\++/g, "+")
+      .replace(/-+/g, "-")
+    const match = compact.match(/\(([+\-]?\d+)\|([+\-]?\d+)\)/) || compact.match(/([+\-]?\d+)\|([+\-]?\d+)/)
+    if(!match) return null
+    return {
+      x: Number(match[1]),
+      y: Number(match[2])
+    }
+  }
+
+  for(const line of scoped){
+    const coord = parseCoordinateLine(line)
+    if(coord && pendingName){
+      const tag = parseVillageTrainingTag(pendingName)
+      const displayName = tag.displayName || pendingName
+      const key = normalizeVillageKey(displayName)
+      if(!coordsByKey.has(key)){
+        coordsByKey.set(key, {
+          key,
+          x: coord.x,
+          y: coord.y
+        })
+      }
+      pendingName = ""
+      continue
+    }
+
+    const nameLine = cleanVillageNameText(line)
+    if(!nameLine) continue
+    if(/^(Village|Sum|Population|Loyalty|Capacity|Warehouse|Production|Resources|Village groups|Task overview|Homepage|Overview|Culture points|Troops|Zona Inicial|Capital|Gasolinera|Aldeas OFF|Aldeas DEFF)$/i.test(nameLine)) continue
+    if(/\d{3,}/.test(nameLine)) continue
+    pendingName = nameLine
   }
 
   return coordsByKey
@@ -548,13 +573,11 @@ function defaultTrainingVillage(data, previous){
 }
 
 function getTrainingCentralCandidates(){
-  return allVillages
+  const detectedCentrals = getDetectedTrainingCentrals()
+  const source = detectedCentrals.length ? detectedCentrals : allVillages
+  return source
     .slice()
-    .sort((a, b) => {
-      const centralDiff = Number(Boolean(b.isCentral)) - Number(Boolean(a.isCentral))
-      if(centralDiff) return centralDiff
-      return compareVillageOrder(a, b)
-    })
+    .sort(compareVillageOrder)
 }
 
 function getDetectedTrainingCentrals(){
@@ -691,11 +714,14 @@ function importTrainingVillages(){
   const merged = []
 
   for(const cap of capacityRows){
-    const res = resourceMap.get(cap.key)
-    const coords = coordsByKey.get(cap.key)
+    const capDisplayKey = normalizeVillageKey(parseVillageTrainingTag(cap.name).displayName || cap.name)
+    const res = resourceMap.get(cap.key) || resourceMap.get(capDisplayKey)
+    const coords = coordsByKey.get(cap.key) || coordsByKey.get(capDisplayKey)
     const sourceOrder = resourceOrderMap.has(cap.key)
       ? resourceOrderMap.get(cap.key)
-      : resourceRows.length + n0(capacityOrderMap.get(cap.key))
+      : (resourceOrderMap.has(capDisplayKey)
+          ? resourceOrderMap.get(capDisplayKey)
+          : resourceRows.length + n0(capacityOrderMap.get(cap.key)))
     merged.push(defaultTrainingVillage({
       ...cap,
       sourceOrder,
@@ -1582,8 +1608,10 @@ function updateTrainingCentralSelect(){
   const recommendedKey = findRecommendedTrainingCentralKey()
   const centralStats = getMerchantStatsForVillage(central)
   const detectedCentrals = getDetectedTrainingCentrals()
-  const coordsLabel = Number.isFinite(Number(central.x)) && Number.isFinite(Number(central.y)) ? `(${central.x}|${central.y})` : "Sin coordenadas"
-  const didLabel = n0(central.did) > 0 ? fmtInt(central.did) : "Pendiente map.sql"
+  const hasCoords = Number.isFinite(central.x) && Number.isFinite(central.y)
+  const coordsLabel = hasCoords ? `(${central.x}|${central.y})` : "Sin coordenadas"
+  const didLabel = n0(central.did) > 0 ? fmtInt(central.did) : "Se resuelve al calcular links"
+  const detectedLabel = detectedCentrals.length ? detectedCentrals.map(item => item.name).join(", ") : "ninguna"
   meta.innerHTML = `
     <div class="training-central-overview">
       <div class="training-central-card training-central-card-main">
@@ -1929,6 +1957,7 @@ function renderTrainingResult(plan){
   const centralRemainingTotal = Math.max(0, n0(plan.centralAvailable?.total) - n0(plan.totalTransfer?.total))
   const visibleVillagePlans = getRenderedVillagePlans(plan)
   const timeLabel = plan.equalizedByCurrent ? "Tiempo comun por edificio" : "Tiempo objetivo"
+  const generatedLinksCount = trainingLastGeneratedLinks.filter(item => item.url).length
 
   body.innerHTML = `
     <div class="training-result-meta">
@@ -1971,6 +2000,10 @@ function renderTrainingResult(plan){
           </div>
         </div>
       </div>
+    </div>
+    <div class="training-result-actions">
+      <button type="button" class="btn btn-orange" id="btnCalculateTrainingLinks">Calcular links</button>
+      <button type="button" class="btn" id="btnOpenAllTrainingLinks" ${generatedLinksCount ? "" : "disabled"}>Abrir todo</button>
     </div>
     <table class="training-transfer-table">
       <thead>
@@ -2050,6 +2083,8 @@ function renderTrainingResult(plan){
         </tbody>
       </table>
     ` : ""}
+    <div class="troop-matrix-title" style="margin-top:18px">Links Rutas Comerciales</div>
+    <div class="training-links-wrap">${renderTrainingLinksTable(trainingLastGeneratedLinks)}</div>
   `
 
   body.querySelectorAll(".split-toggle-btn").forEach((button) => {
