@@ -2323,6 +2323,62 @@ def test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity
     assert "9 x 18000 = 162000" in result["html"], "La tabla de links no mostro la capacidad total de mercaderes usados"
 
 
+def test_npc_training_send_button_changes_color_after_click(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        """
+        trainingLastGeneratedLinks = [{
+          villageKey: "villa-a",
+          villageName: "Villa Esperanza",
+          distance: 1,
+          distanceLabel: "1.00",
+          didDest: 32286,
+          sendLabel: "07:36",
+          merchantSpeed: 16,
+          travelSeconds: 75,
+          nextReadyLabel: "07:38:45",
+          repeat: 2,
+          perTripTotal: 149388,
+          merchantsNeeded: 9,
+          capacityEach: 18000,
+          merchantTotalCapacity: 162000,
+          fitDetail: "Entra completo",
+          overMerchantCapacity: false,
+          url: "https://example.com"
+        }];
+        trainingSentLinkState = {};
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 1,
+          villagePlans: []
+        });
+        document.querySelector('.training-link-btn').addEventListener('click', (event) => event.preventDefault(), { once: true });
+        """
+    )
+
+    driver.find_element(By.CSS_SELECTOR, ".training-link-btn").click()
+
+    result = driver.execute_script(
+        """
+        const button = document.querySelector('.training-link-btn');
+        return {
+          text: button.textContent.trim(),
+          sent: button.classList.contains('is-sent')
+        };
+        """
+    )
+
+    assert result["sent"], "El boton Enviar no cambio de color/estado tras hacer click"
+    assert result["text"] == "Enviado", "El boton Enviar no actualizo su texto tras hacer click"
+
+
 def test_npc_training_shows_link_progress_feedback(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -3145,6 +3201,7 @@ def main():
                 ("npc_training_next_departure_rounds_up_to_minute_after_second_precision_return", test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return),
                 ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
                 ("npc_training_links_table_shows_speed_return_and_total_merchant_capacity", test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity),
+                ("npc_training_send_button_changes_color_after_click", test_npc_training_send_button_changes_color_after_click),
                 ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
                 ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),

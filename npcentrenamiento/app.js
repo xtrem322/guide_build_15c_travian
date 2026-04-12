@@ -15,6 +15,7 @@ let trainingLastImportSummary = "Sin datos importados."
 let trainingLastRenderedPlan = null
 let trainingSplitModeByVillage = {}
 let trainingLastGeneratedLinks = []
+let trainingSentLinkState = {}
 let trainingLinksUiState = { status: "idle", message: "" }
 let trainingMapLookupByServer = {}
 const trainingGlobalConfig = {
@@ -2207,6 +2208,15 @@ function sanitizeTrainingLinkError(error){
   return "No se pudieron generar los links. Revisa coordenadas, servidor y vuelve a intentar."
 }
 
+function getTrainingLinkStateKey(item){
+  return [
+    String(item?.villageKey || item?.villageName || ""),
+    String(Math.floor(n0(item?.didDest))),
+    String(item?.sendLabel || ""),
+    String(item?.url || "")
+  ].join("|")
+}
+
 function renderTrainingLinksFeedback(){
   const message = escapeHtml(trainingLinksUiState.message || "")
   if(trainingLinksUiState.status === "loading"){
@@ -2278,7 +2288,7 @@ function renderTrainingLinksTable(rows){
               <td>${fmtInt(item.perTripTotal)}</td>
               <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)}</td>
               <td>${escapeHtml(item.fitDetail)}${item.overMerchantCapacity ? " · Espera mercaderes" : ""}</td>
-              <td><a class="btn btn-orange training-link-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Enviar</a></td>
+              <td><a class="btn btn-orange training-link-btn${trainingSentLinkState[getTrainingLinkStateKey(item)] ? " is-sent" : ""}" data-link-key="${escapeHtml(getTrainingLinkStateKey(item))}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${trainingSentLinkState[getTrainingLinkStateKey(item)] ? "Enviado" : "Enviar"}</a></td>
             </tr>
           `
         }).join("")}
@@ -2330,7 +2340,7 @@ function renderTrainingLinksTable(rows){
               <td>${fmtInt(item.perTripTotal)}</td>
               <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)} = ${fmtInt(item.merchantTotalCapacity)}</td>
               <td>${escapeHtml(item.fitDetail)}${item.overMerchantCapacity ? " · Espera mercaderes" : ""}</td>
-              <td><a class="btn btn-orange training-link-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Enviar</a></td>
+              <td><a class="btn btn-orange training-link-btn${trainingSentLinkState[getTrainingLinkStateKey(item)] ? " is-sent" : ""}" data-link-key="${escapeHtml(getTrainingLinkStateKey(item))}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${trainingSentLinkState[getTrainingLinkStateKey(item)] ? "Enviado" : "Enviar"}</a></td>
             </tr>
           `
         }).join("")}
@@ -2540,6 +2550,15 @@ function renderTrainingResult(plan){
       recalc()
     })
   })
+  body.querySelectorAll(".training-link-btn").forEach((link) => {
+    link.addEventListener("click", () => {
+      const key = link.getAttribute("data-link-key") || ""
+      if(!key) return
+      trainingSentLinkState[key] = true
+      link.classList.add("is-sent")
+      link.textContent = "Enviado"
+    })
+  })
   const calcLinksButton = body.querySelector("#btnCalculateTrainingLinks")
   if(calcLinksButton){
     calcLinksButton.addEventListener("click", async () => {
@@ -2553,6 +2572,7 @@ function renderTrainingResult(plan){
       if(loadingButton) loadingButton.disabled = true
       try {
         const rows = await generateTrainingTradeLinks(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+        trainingSentLinkState = {}
         trainingLinksUiState = {
           status: "success",
           message: `${fmtInt(rows.filter(item => item.url).length)} links generados.`
@@ -2589,6 +2609,7 @@ function renderTrainingResult(plan){
 
 function recalc(){
   trainingLastGeneratedLinks = []
+  trainingSentLinkState = {}
   trainingLinksUiState = { status: "idle", message: "" }
   updateTrainingCentralSelect()
   refreshTrainingTimeModeControls()

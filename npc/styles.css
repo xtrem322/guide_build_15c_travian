@@ -874,6 +874,12 @@ select,input{
   min-width:84px;
 }
 
+.training-link-btn.is-sent{
+  background:#64748b;
+  color:#fff;
+  border:none;
+}
+
 .training-link-error{
   color:var(--danger);
   font-weight:800;
