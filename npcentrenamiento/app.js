@@ -1345,7 +1345,7 @@ function syncGlobalTrainingConfigFromDom(){
   trainingGlobalConfig.allianceBonus = Number($("globalAllianceBonus")?.value || 0)
   trainingGlobalConfig.marketBonus = Number($("globalMarketBonus")?.value || 0)
   trainingGlobalConfig.marketplaceLevel = Math.max(1, Math.floor(n0($("trainingMarketplaceLevel")?.value || 20)))
-  trainingGlobalConfig.useDestinationCapacityCap = Boolean($("useDestinationCapacityCap")?.checked)
+  if($("useDestinationCapacityCap")) trainingGlobalConfig.useDestinationCapacityCap = Boolean($("useDestinationCapacityCap")?.checked)
   trainingGlobalConfig.trooperEnabled = Boolean($("globalTrooperEnabled")?.checked)
   trainingGlobalConfig.trooperBoost = Number($("globalTrooperBoost")?.value || 0)
   trainingGlobalConfig.helmetEnabled = Boolean($("globalHelmetEnabled")?.checked)
@@ -2425,6 +2425,10 @@ function renderTrainingResult(plan){
     <div class="training-result-actions">
       <button type="button" class="btn btn-orange" id="btnCalculateTrainingLinks">Calcular links</button>
       <button type="button" class="btn" id="btnOpenAllTrainingLinks" ${generatedLinksCount ? "" : "disabled"}>Abrir todo</button>
+      <label class="training-inline-check training-inline-check-boxed">
+        <input type="checkbox" id="useDestinationCapacityCap" ${plan.usesDestinationCapacityCap ? "checked" : ""}>
+        <span>Usar tope almacen Aldea destino?</span>
+      </label>
     </div>
     <table class="training-transfer-table">
       <thead>
@@ -2572,6 +2576,13 @@ function renderTrainingResult(plan){
       openAllTrainingLinks()
     })
   }
+  const destinationCapCheckbox = body.querySelector("#useDestinationCapacityCap")
+  if(destinationCapCheckbox){
+    destinationCapCheckbox.addEventListener("change", () => {
+      trainingGlobalConfig.useDestinationCapacityCap = destinationCapCheckbox.checked
+      recalc()
+    })
+  }
 }
 
 function recalc(){
@@ -2691,10 +2702,6 @@ async function init(){
   })
   $("equalizeTrainingTimes").addEventListener("change", () => {
     refreshTrainingTimeModeControls()
-    syncGlobalTrainingConfigFromDom()
-    recalc()
-  })
-  $("useDestinationCapacityCap").addEventListener("change", () => {
     syncGlobalTrainingConfigFromDom()
     recalc()
   })

@@ -1244,6 +1244,7 @@ def test_npc_training_split_buttons(driver, base_url):
 
     assert driver.find_element(By.ID, "btnCalculateTrainingLinks").is_displayed(), "El boton Calcular links no se renderizo dentro del plan"
     assert driver.find_element(By.ID, "btnOpenAllTrainingLinks").is_displayed(), "El boton Abrir todo no se renderizo dentro del plan"
+    assert driver.find_element(By.CSS_SELECTOR, ".training-result-actions #useDestinationCapacityCap").is_displayed(), "El checkbox de tope por aldea destino no quedo junto a los botones del plan"
 
     driver.find_element(By.CSS_SELECTOR, '.split-toggle-btn[data-factor="2"]').click()
     labels_after_2 = [el.text for el in driver.find_elements(By.CSS_SELECTOR, ".split-subvalue")]
