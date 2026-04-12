@@ -1608,6 +1608,119 @@ def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
     assert len(result["opened"]) == 2 and all("build.php?gid=17" in item for item in result["opened"]), "Abrir todo no abrio las rutas comerciales esperadas"
 
 
+def test_npc_training_shows_link_progress_feedback(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        trainingLastGeneratedLinks = [];
+        trainingLinksUiState = {
+          status: "loading",
+          message: "Consultando map.sql y calculando rutas comerciales."
+        };
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 4000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 1,
+          villagePlans: [{
+            village: { key: "villa-a", name: "Villa A", warehouseCap: 999999, granaryCap: 999999, current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }) },
+            status: "NPC",
+            currentTime: 0,
+            totalTargetSec: 120,
+            counts: [{ label:"C", troopName:"Imperiano", units:10 }],
+            deficit: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 })
+          }]
+        });
+        return {
+          text: document.querySelector('.training-links-feedback')?.textContent || "",
+          hasProgress: document.querySelector('.training-links-progress span') !== null
+        };
+        """
+    )
+
+    assert "Generando links" in result["text"], "La seccion de links no mostro un mensaje de progreso mientras calcula"
+    assert result["hasProgress"], "La seccion de links no mostro una barra de progreso al calcular"
+
+
+def test_npc_training_sanitizes_link_error_feedback(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    driver.execute_script(
+        """
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          merchantsAvailable: 20,
+          merchantsTotal: 20,
+          current: withResourceTotal({ wood: 100000, clay: 100000, iron: 100000, crop: 100000 }),
+          hasResources: true
+        };
+
+        allVillages = [central];
+        trainingCentralKey = "central";
+        trainingLastGeneratedLinks = [];
+        trainingLinksUiState = { status: "idle", message: "" };
+        window.__originalGenerateTrainingTradeLinks = generateTrainingTradeLinks;
+        generateTrainingTradeLinks = async () => {
+          throw new Error("Failed to fetch");
+        };
+
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 1,
+          villagePlans: [{
+            village: {
+              key: "villa-a",
+              name: "Villa A",
+              warehouseCap: 999999,
+              granaryCap: 999999,
+              current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 })
+            },
+            status: "NPC",
+            currentTime: 0,
+            totalTargetSec: 120,
+            counts: [{ label:"C", troopName:"Imperiano", units:10 }],
+            deficit: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 })
+          }]
+        });
+        """
+    )
+
+    driver.find_element(By.ID, "btnCalculateTrainingLinks").click()
+    WebDriverWait(driver, 10).until(
+        lambda d: d.find_element(By.CSS_SELECTOR, ".training-links-feedback.is-error").is_displayed()
+    )
+
+    feedback = driver.find_element(By.CSS_SELECTOR, ".training-links-feedback.is-error").text
+    status = driver.find_element(By.ID, "statusLine").text
+
+    assert "Failed to fetch" not in feedback and "Failed to fetch" not in status, "El error de links se mostro crudo en vez de sanitizado"
+    assert "map.sql" in feedback, "El mensaje sanitizado de error no explico que fallo la descarga de map.sql"
+
+
 def test_npc_training_delivered_and_delete_controls(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -2309,6 +2422,8 @@ def main():
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
+                ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
+                ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
                 ("npc_training_mobile_horizontal_scroll", test_npc_training_mobile_horizontal_scroll),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),

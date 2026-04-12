@@ -15,6 +15,7 @@ let trainingLastImportSummary = "Sin datos importados."
 let trainingLastRenderedPlan = null
 let trainingSplitModeByVillage = {}
 let trainingLastGeneratedLinks = []
+let trainingLinksUiState = { status: "idle", message: "" }
 let trainingMapLookupByServer = {}
 const trainingGlobalConfig = {
   allianceBonus: 0,
@@ -1469,6 +1470,7 @@ function renderTrainingResult(plan){
       </table>
     ` : ""}
     <div class="troop-matrix-title" style="margin-top:18px">Links Rutas Comerciales</div>
+    ${renderTrainingLinksFeedback()}
     <div class="training-links-wrap">${renderTrainingLinksTable(trainingLastGeneratedLinks)}</div>
   `
 
@@ -1879,6 +1881,50 @@ function escapeHtml(text){
     .replace(/"/g, "&quot;")
 }
 
+function sanitizeTrainingLinkError(error){
+  const raw = String(error?.message || error || "").trim()
+  if(!raw) return "No se pudieron generar los links. Revisa el servidor y vuelve a intentar."
+  if(/No hay un plan NPC valido/i.test(raw)) return "Primero genera un plan NPC valido."
+  if(/Define el servidor/i.test(raw)) return "Define el servidor Travian antes de calcular links."
+  if(/Selecciona una aldea central/i.test(raw)) return "Selecciona una aldea central para calcular los links."
+  if(/Failed to fetch|NetworkError|Load failed|ERR_/i.test(raw)) return "No se pudo conectar con el servidor para descargar map.sql."
+  if(/HTTP\s+\d+/i.test(raw) && /map\.sql/i.test(raw)) return "No se pudo descargar map.sql del servidor configurado."
+  if(/map\.sql/i.test(raw)) return "No se pudo leer map.sql. Revisa el servidor configurado e intenta otra vez."
+  return "No se pudieron generar los links. Revisa coordenadas, servidor y vuelve a intentar."
+}
+
+function renderTrainingLinksFeedback(){
+  const message = escapeHtml(trainingLinksUiState.message || "")
+  if(trainingLinksUiState.status === "loading"){
+    return `
+      <div class="training-links-feedback is-loading" role="status" aria-live="polite">
+        <div class="training-links-feedback-row">
+          <strong>Generando links...</strong>
+          <span>${message || "Consultando map.sql y calculando rutas comerciales."}</span>
+        </div>
+        <div class="training-links-progress" aria-hidden="true"><span></span></div>
+      </div>
+    `
+  }
+  if(trainingLinksUiState.status === "error"){
+    return `
+      <div class="training-links-feedback is-error" role="alert">
+        <strong>No se pudieron generar los links.</strong>
+        <span>${message || "Revisa el servidor, las coordenadas y vuelve a intentar."}</span>
+      </div>
+    `
+  }
+  if(trainingLinksUiState.status === "success" && trainingLinksUiState.message){
+    return `
+      <div class="training-links-feedback is-success" role="status" aria-live="polite">
+        <strong>Links listos.</strong>
+        <span>${message}</span>
+      </div>
+    `
+  }
+  return ""
+}
+
 function renderTrainingLinksTable(rows){
   if(!rows.length) return `<div class="training-empty">Todavia no hay links calculados.</div>`
   return `
@@ -2084,6 +2130,7 @@ function renderTrainingResult(plan){
       </table>
     ` : ""}
     <div class="troop-matrix-title" style="margin-top:18px">Links Rutas Comerciales</div>
+    ${renderTrainingLinksFeedback()}
     <div class="training-links-wrap">${renderTrainingLinksTable(trainingLastGeneratedLinks)}</div>
   `
 
@@ -2111,13 +2158,29 @@ function renderTrainingResult(plan){
   if(calcLinksButton){
     calcLinksButton.addEventListener("click", async () => {
       calcLinksButton.disabled = true
+      trainingLinksUiState = {
+        status: "loading",
+        message: "Consultando map.sql y calculando rutas comerciales."
+      }
+      renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+      const loadingButton = $("btnCalculateTrainingLinks")
+      if(loadingButton) loadingButton.disabled = true
       try {
         const rows = await generateTrainingTradeLinks(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+        trainingLinksUiState = {
+          status: "success",
+          message: `${fmtInt(rows.filter(item => item.url).length)} links generados.`
+        }
         renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
         openTrainingLinksPreview(rows)
         showStatus(`OK. Links generados: ${fmtInt(rows.filter(item => item.url).length)}`, "ok")
       } catch (error){
-        showStatus(error?.message || "No se pudieron generar los links.", "bad")
+        trainingLinksUiState = {
+          status: "error",
+          message: sanitizeTrainingLinkError(error)
+        }
+        renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+        showStatus(trainingLinksUiState.message, "bad")
       } finally {
         const activeButton = $("btnCalculateTrainingLinks")
         if(activeButton) activeButton.disabled = false
@@ -2134,6 +2197,7 @@ function renderTrainingResult(plan){
 
 function recalc(){
   trainingLastGeneratedLinks = []
+  trainingLinksUiState = { status: "idle", message: "" }
   updateTrainingCentralSelect()
   refreshTrainingTimeModeControls()
   renderTrainingVillageTable()
