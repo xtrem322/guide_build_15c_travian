@@ -669,6 +669,10 @@ function addMinutes(date, minutes){
   return new Date(date.getTime() + Math.max(0, n0(minutes)) * 60000)
 }
 
+function addSeconds(date, seconds){
+  return new Date(date.getTime() + Math.max(0, n0(seconds)) * 1000)
+}
+
 function updateTrainingMapSqlStatus(message, tone){
   const status = $("trainingMapSqlStatus")
   if(!status) return
@@ -1853,14 +1857,14 @@ function chooseRepeatAndPayload(village, deficit, centralStats){
   }
 }
 
-function getTravelMinutesBetweenVillages(origin, target, speedTilesPerHour){
+function getTravelSecondsBetweenVillages(origin, target, speedTilesPerHour){
   const distance = getVillageDistance(origin, target)
   if(!Number.isFinite(distance)) return 0
-  const minutes = (distance / Math.max(1, n0(speedTilesPerHour))) * 60
-  return Math.max(0, Math.ceil(minutes))
+  const seconds = (distance / Math.max(1, n0(speedTilesPerHour))) * 3600
+  return Math.max(0, Math.ceil(seconds))
 }
 
-function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occupiedMinutes){
+function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occupiedSeconds){
   const baseMs = Math.max(0, new Date(earliestDate instanceof Date ? earliestDate.getTime() : Date.now()).getTime())
   const pool = Array.isArray(freeAtMsList) ? freeAtMsList : []
   const needed = Math.max(1, Math.min(Math.floor(n0(merchantsNeeded || 1)), Math.max(1, pool.length)))
@@ -1872,7 +1876,7 @@ function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occu
   }
 
   const sendMs = Math.max(baseMs, ...picked)
-  const releaseDate = ceilDateToMinute(addMinutes(new Date(sendMs), occupiedMinutes))
+  const releaseDate = addSeconds(new Date(sendMs), occupiedSeconds)
   const releaseMs = releaseDate.getTime()
   for(let idx = 0; idx < picked.length; idx++) pool.push(releaseMs)
 
@@ -1900,7 +1904,8 @@ function formatDateAsServerHm(date){
   return {
     hour: serverDate.getHours(),
     minute: serverDate.getMinutes(),
-    label: `${String(serverDate.getHours()).padStart(2, "0")}:${String(serverDate.getMinutes()).padStart(2, "0")}`
+    second: serverDate.getSeconds(),
+    label: `${String(serverDate.getHours()).padStart(2, "0")}:${String(serverDate.getMinutes()).padStart(2, "0")}:${String(serverDate.getSeconds()).padStart(2, "0")}`
   }
 }
 
@@ -1919,7 +1924,7 @@ async function generateTrainingTradeLinks(plan){
   const central = allVillages.find(v => v.key === trainingCentralKey)
   if(!central) throw new Error("Selecciona una aldea central.")
   const centralStats = getMerchantStatsForVillage(central)
-  const now = ceilDateToMinute(addMinutes(new Date(), 2))
+  const now = addMinutes(new Date(), 2)
   const merchantPoolSize = Math.max(1, Math.floor(n0(centralStats.merchantsTotal || centralStats.merchantsAvailable || 1)))
   const merchantFreeAtMs = Array.from({ length: merchantPoolSize }, () => now.getTime())
 
@@ -1944,13 +1949,13 @@ async function generateTrainingTradeLinks(plan){
     }
 
     const repeatInfo = chooseRepeatAndPayload(item.village, item.deficit, centralStats)
-    const travelMinutes = getTravelMinutesBetweenVillages(central, item.village, centralStats.speedTilesPerHour)
-    const roundTripMinutes = Math.max(0, travelMinutes * 2 * repeatInfo.repeat)
+    const travelSeconds = getTravelSecondsBetweenVillages(central, item.village, centralStats.speedTilesPerHour)
+    const roundTripSeconds = Math.max(0, travelSeconds * 2 * repeatInfo.repeat)
     const merchantWindow = reserveMerchantWindow(
       merchantFreeAtMs,
       repeatInfo.merchantsNeeded,
       now,
-      roundTripMinutes
+      roundTripSeconds
     )
     const sendInfo = formatDateAsServerHm(merchantWindow.sendDate)
     const url = buildTradeRouteUrl({
@@ -1972,7 +1977,7 @@ async function generateTrainingTradeLinks(plan){
       distance: getVillageDistance(central, item.village),
       distanceLabel: getVillageDistanceLabel(central, item.village),
       didDest: item.village.did,
-      travelMinutes,
+      travelSeconds,
       merchantSpeed: centralStats.speedTilesPerHour,
       repeat: repeatInfo.repeat,
       sendLabel: sendInfo.label,
@@ -2080,7 +2085,7 @@ function renderTrainingLinksTable(rows){
               <td>${escapeHtml(item.distanceLabel)}</td>
               <td>${fmtInt(item.didDest)}</td>
               <td>${escapeHtml(item.sendLabel)}</td>
-              <td>${fmtTime(item.travelMinutes * 60)}</td>
+              <td>${fmtTime(item.travelSeconds)}</td>
               <td>${fmtInt(item.repeat)}</td>
               <td>${fmtInt(item.perTripTotal)}</td>
               <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)}</td>
@@ -2131,7 +2136,7 @@ function renderTrainingLinksTable(rows){
               <td>${fmtInt(item.didDest)}</td>
               <td>${escapeHtml(item.sendLabel)}</td>
               <td>${fmtInt(item.merchantSpeed)} c/h</td>
-              <td>${fmtTime(item.travelMinutes * 60)}</td>
+              <td>${fmtTime(item.travelSeconds)}</td>
               <td>${escapeHtml(item.nextReadyLabel)}</td>
               <td>${fmtInt(item.repeat)}</td>
               <td>${fmtInt(item.perTripTotal)}</td>
