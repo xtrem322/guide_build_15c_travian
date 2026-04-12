@@ -812,7 +812,29 @@ function findBestTrainingPlan(){
     }, 0)
     : 0
   const base = evaluateTrainingTarget(minTargetSec)
-  if(!base.feasible) return base
+  if(!base.feasible){
+    if(minTargetSec <= 0) return base
+
+    const fallbackBase = evaluateTrainingTarget(0)
+    if(!fallbackBase.feasible) return base
+
+    let best = fallbackBase
+    let lo = 0
+    let hi = minTargetSec - 1
+
+    while(lo < hi){
+      const mid = Math.floor((lo + hi + 1) / 2)
+      const probe = evaluateTrainingTarget(mid)
+      if(probe.feasible){
+        best = probe
+        lo = mid
+      } else {
+        hi = mid - 1
+      }
+    }
+
+    return best
+  }
 
   let best = base
   let lo = minTargetSec

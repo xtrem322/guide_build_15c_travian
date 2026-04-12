@@ -804,6 +804,89 @@ def test_npc_training_central_capacity_cap(driver, base_url):
     assert "tope de madera del almacen central (300)" in result["reason"], "NPC entrenamiento no explico el tope por recurso de la central"
 
 
+def test_npc_training_finds_lower_target_when_equalized_base_does_not_fit(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalGetTrainingRequirement = getTrainingRequirement;
+        const originalBuildTrainingQueues = buildTrainingQueues;
+        const originalGetQueueCurrentTrainingSec = getQueueCurrentTrainingSec;
+        const originalIsEqualTrainingTimeModeEnabled = isEqualTrainingTimeModeEnabled;
+        try {
+          const fake = (name, key, current, isTraining, warehouseCap, granaryCap, currentQueueSec) => ({
+            id: key,
+            name,
+            key,
+            sourceOrder: 0,
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining,
+            warehouseCap,
+            granaryCap,
+            current: withResourceTotal(current),
+            hasResources: true,
+            barracksTroop: "X",
+            stableTroop: "",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0,
+            currentTrainingByQueue: withTrainingQueueTimes({ C: currentQueueSec, E: 0, T: 0 }),
+            currentTrainingSec: currentQueueSec
+          });
+
+          allVillages = [
+            fake("Central", "central", { wood: 1000, clay: 1000, iron: 1000, crop: 1000 }, false, 300, 800, 0),
+            fake("FR Aldea A", "a", { wood: 0, clay: 0, iron: 0, crop: 0 }, true, 999999, 999999, 600),
+            fake("FR Aldea B", "b", { wood: 0, clay: 0, iron: 0, crop: 0 }, true, 999999, 999999, 0)
+          ];
+          trainingVillages = allVillages.filter(v => v.isTraining);
+          trainingCentralKey = "central";
+
+          isEqualTrainingTimeModeEnabled = () => true;
+          buildTrainingQueues = () => [{ label:"C" }];
+          getQueueCurrentTrainingSec = (village) => village.key === "a" ? 600 : 0;
+          getTrainingRequirement = (village, targetSec) => {
+            const requested = village.key === "a"
+              ? Math.max(0, targetSec - 600)
+              : Math.max(0, targetSec);
+            return {
+              queues:[{label:"C"}],
+              counts:[{label:"C", units: requested}],
+              resources: withResourceTotal({ wood: requested, clay: 0, iron: 0, crop: 0 }),
+              currentTrainingByQueue: withTrainingQueueTimes({ C: village.key === "a" ? 600 : 0, E: 0, T: 0 }),
+              requestedTrainingByQueue: withTrainingQueueTimes({ C: requested, E: 0, T: 0 }),
+              maxCurrentSec: village.key === "a" ? 600 : 0,
+              maxRequestedSec: requested
+            };
+          };
+
+          const plan = findBestTrainingPlan();
+          return {
+            feasible: plan.feasible,
+            targetSec: plan.targetSec,
+            totalWood: plan.totalTransfer?.wood || 0
+          };
+        } finally {
+          getTrainingRequirement = originalGetTrainingRequirement;
+          buildTrainingQueues = originalBuildTrainingQueues;
+          getQueueCurrentTrainingSec = originalGetQueueCurrentTrainingSec;
+          isEqualTrainingTimeModeEnabled = originalIsEqualTrainingTimeModeEnabled;
+        }
+        """
+    )
+
+    assert result["feasible"], "NPC entrenamiento debia bajar el tiempo objetivo cuando el minimo por igualacion no calzaba"
+    assert result["targetSec"] == 300, "NPC entrenamiento no encontro el mayor tiempo objetivo que si cabia en la central"
+    assert result["totalWood"] == 300, "NPC entrenamiento no ajusto el NPC total al nuevo tiempo objetivo reducido"
+
+
 def test_npc_training_npc_central_boxes(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -1991,6 +2074,7 @@ def main():
                 ("npc_training_central_total_and_village_transfers", test_npc_training_central_total_and_village_transfers),
                 ("npc_training_uses_village_transfers_only_after_central_exhausts", test_npc_training_uses_village_transfers_only_after_central_exhausts),
                 ("npc_training_central_capacity_cap", test_npc_training_central_capacity_cap),
+                ("npc_training_finds_lower_target_when_equalized_base_does_not_fit", test_npc_training_finds_lower_target_when_equalized_base_does_not_fit),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("npc_training_central_overview_cards", test_npc_training_central_overview_cards),
                 ("npc_training_equalize_times_toggle_and_parser", test_npc_training_equalize_times_toggle_and_parser),
