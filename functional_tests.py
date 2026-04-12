@@ -220,6 +220,13 @@ Loyalty: 100%
 Villages 13/14
 """
 
+MAP_SQL_EXAMPLE = """INSERT INTO `vdata` VALUES (32285,'CE Villa Tormento',84,-165,915,17,0,0,0,0,0,0,0,0,0,0);
+INSERT INTO `vdata` VALUES (32286,'FH Villa Esperanza',84,-166,915,17,0,0,0,0,0,0,0,0,0,0);
+INSERT INTO `vdata` VALUES (32287,'FGA Villa Emoción',84,-164,915,17,0,0,0,0,0,0,0,0,0,0);
+INSERT INTO `vdata` VALUES (32288,'FGE Villa Charizard',83,-168,915,17,0,0,0,0,0,0,0,0,0,0);
+INSERT INTO `vdata` VALUES (32289,'FR Ojitos Rojos',81,-168,915,17,0,0,0,0,0,0,0,0,0,0);
+"""
+
 TRAINING_NAME_REPLACEMENTS = {
     "Villa Esperanza": "FH: Villa Esperanza",
     "Villa EmociÃ³n": "FGA: Villa EmociÃ³n",
@@ -929,7 +936,7 @@ def test_npc_training_central_overview_cards(driver, base_url):
     driver.find_element(By.ID, "btnImportTraining").click()
 
     WebDriverWait(driver, 10).until(
-        lambda d: len(d.find_elements(By.CSS_SELECTOR, ".training-central-card")) == 4
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, ".training-central-card")) == 6
     )
 
     labels = [
@@ -946,9 +953,38 @@ def test_npc_training_central_overview_cards(driver, base_url):
         "RECURSOS ACTUALES",
         "CAPACIDAD MAXIMA",
         "TOTAL DISPONIBLE",
+        "MERCADERES",
+        "RAZA / MAPA",
     ], "La seccion de aldea central no quedo separada en bloques entendibles"
     assert values[0] == "Villa Tormento", "La tarjeta principal de aldea central no mostro la aldea seleccionada"
     assert values[3] == "946460", "La tarjeta de total disponible no mostro la suma de recursos de la central"
+    assert values[4] == "20 / 20", "La tarjeta de mercaderes no mostro disponibles y total de la central"
+
+
+def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    capacity_training = with_training_prefixes(CAPACITY_EXAMPLE).replace("Villa Tormento", "CE: Villa Tormento")
+    resources_training = with_training_prefixes(RESOURCES_EXAMPLE).replace("Villa Tormento", "CE: Villa Tormento")
+    driver.execute_script(
+        "document.getElementById('trainingCapacityInput').value = arguments[0];"
+        "document.getElementById('trainingResourcesInput').value = arguments[1];",
+        capacity_training,
+        resources_training
+    )
+    driver.find_element(By.ID, "btnImportTraining").click()
+
+    central_select = Select(driver.find_element(By.ID, "trainingCentralVillage"))
+    selected_text = central_select.first_selected_option.text.strip()
+    market_options = [option.text.strip() for option in Select(driver.find_element(By.ID, "globalMarketBonus")).options]
+    office_level = Select(driver.find_element(By.ID, "trainingTradeOfficeLevel")).first_selected_option.text.strip()
+    central_meta = driver.find_element(By.ID, "trainingCentralMeta").text
+
+    assert selected_text.startswith("[Central] Villa Tormento"), "NPC entrenamiento no auto selecciono la central marcada con prefijo C"
+    assert market_options == ["0%", "30%", "60%", "90%", "120%", "150%"], "NPC entrenamiento no agrego las opciones del bono de mercado"
+    assert office_level == "20", "La oficina de comercio no debia iniciar en nivel 20"
+    assert "EGIPTO" in central_meta, "NPC entrenamiento no mostro la raza de la central detectada"
 
 
 def test_npc_training_equalize_times_toggle_and_parser(driver, base_url):
@@ -1386,6 +1422,183 @@ def test_npc_training_total_and_capacity_fit_columns(driver, base_url):
     assert result["fitA"].startswith("SI"), "CALZA? debia indicar SI cuando todos los recursos entran en almacen/granero"
     assert result["totalB"].startswith("45000"), "La columna Total no sumo correctamente la segunda fila"
     assert result["fitB"].startswith("NO"), "CALZA? debia indicar NO cuando algun recurso supera la capacidad"
+
+
+def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const mapSql = arguments[0];
+        const done = arguments[arguments.length - 1];
+        const originalFetch = window.fetch;
+        const originalOpen = window.open;
+        const originalGetServerTimeFromLocal = getServerTimeFromLocal;
+        const OriginalDate = Date;
+        window.__opened = [];
+        window.fetch = async (url) => ({
+          ok: String(url).includes("/map.sql"),
+          text: async () => mapSql
+        });
+        window.open = (url) => {
+          window.__opened.push(url || "preview");
+          return {
+            document: {
+              write(){},
+              close(){}
+            }
+          };
+        };
+        Date = class extends OriginalDate {
+          constructor(...args){
+            if(args.length){
+              super(...args);
+            } else {
+              super("2026-04-12T05:58:00Z");
+            }
+          }
+          static now(){
+            return new OriginalDate("2026-04-12T05:58:00Z").getTime();
+          }
+        };
+        getServerTimeFromLocal = (date) => new OriginalDate(date.getTime() + 6 * 3600000);
+
+        document.getElementById("serverSpeed").value = "1";
+        document.getElementById("globalMarketBonus").value = "0.30";
+        document.getElementById("trainingServerHost").value = "eternos.x3.hispano.travian.com";
+        document.getElementById("trainingTradeOfficeEnabled").checked = true;
+        document.getElementById("trainingTradeOfficeLevel").value = "20";
+        syncGlobalTrainingConfigFromDom();
+
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          current: withResourceTotal({ wood: 100000, clay: 100000, iron: 100000, crop: 100000 }),
+          merchantsAvailable: 2,
+          merchantsTotal: 2,
+          hasResources: true
+        };
+        const villageNear = {
+          id: "near",
+          name: "Villa Esperanza",
+          key: "near",
+          sourceOrder: 1,
+          race: "HUNOS",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -166,
+          did: 0,
+          warehouseCap: 10000,
+          granaryCap: 10000,
+          current: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+        const villageFar = {
+          id: "far",
+          name: "Ojitos Rojos",
+          key: "far",
+          sourceOrder: 2,
+          race: "ROMANO",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 81,
+          y: -168,
+          did: 0,
+          warehouseCap: 10000,
+          granaryCap: 10000,
+          current: withResourceTotal({ wood: 9000, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+
+        allVillages = [central, villageNear, villageFar];
+        trainingVillages = [villageNear, villageFar];
+        trainingCentralKey = "central";
+
+        const plan = {
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 4000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 2,
+          villagePlans: [
+            {
+              village: villageNear,
+              status: "NPC",
+              currentTime: 0,
+              totalTargetSec: 120,
+              counts: [{ label:"C", troopName:"Guardia Ash", units:100 }],
+              deficit: withResourceTotal({ wood: 2000, clay: 0, iron: 0, crop: 0 })
+            },
+            {
+              village: villageFar,
+              status: "NPC",
+              currentTime: 0,
+              totalTargetSec: 120,
+              counts: [{ label:"C", troopName:"Guardia Ash", units:100 }],
+              deficit: withResourceTotal({ wood: 2000, clay: 0, iron: 0, crop: 0 })
+            }
+          ]
+        };
+
+        const finalize = (payload) => {
+          window.fetch = originalFetch;
+          window.open = originalOpen;
+          getServerTimeFromLocal = originalGetServerTimeFromLocal;
+          Date = OriginalDate;
+          done(payload);
+        };
+
+        generateTrainingTradeLinks(plan).then((rows) => {
+          renderTrainingResult(plan);
+          openAllTrainingLinks();
+          finalize({
+            rows: rows.map(item => ({
+              village: item.villageName,
+              did: item.didDest,
+              repeat: item.repeat,
+              send: item.sendLabel,
+              distance: item.distanceLabel,
+              r1: item.perTrip.wood,
+              url: item.url
+            })),
+            opened: window.__opened
+          });
+        }).catch((error) => {
+          finalize({ error: error.message || String(error) });
+        });
+        """,
+        MAP_SQL_EXAMPLE
+    )
+
+    assert "error" not in result, result.get("error")
+    assert [item["village"] for item in result["rows"]] == ["Villa Esperanza", "Ojitos Rojos"], "Los links no se ordenaron por distancia desde la central"
+    assert result["rows"][0]["did"] == 32286 and result["rows"][1]["did"] == 32289, "No se resolvio did_dest desde map.sql"
+    assert result["rows"][0]["repeat"] == 1, "La aldea cercana no debia dividirse en varios envios"
+    assert result["rows"][1]["repeat"] == 2, "La aldea que no calzaba debia dividirse entre 2"
+    assert result["rows"][0]["send"] == "07:00", "La primera salida no se programo a los 2 minutos en hora servidor UTC+1"
+    assert "did_dest=32286" in result["rows"][0]["url"] and "trade_route_mode=send" in result["rows"][0]["url"], "El link generado no siguio el formato esperado"
+    assert len(result["opened"]) == 2 and all("build.php?gid=17" in item for item in result["opened"]), "Abrir todo no abrio las rutas comerciales esperadas"
 
 
 def test_npc_training_delivered_and_delete_controls(driver, base_url):
@@ -2077,6 +2290,7 @@ def main():
                 ("npc_training_finds_lower_target_when_equalized_base_does_not_fit", test_npc_training_finds_lower_target_when_equalized_base_does_not_fit),
                 ("npc_training_npc_central_boxes", test_npc_training_npc_central_boxes),
                 ("npc_training_central_overview_cards", test_npc_training_central_overview_cards),
+                ("npc_training_detects_prefixed_central_and_market_controls", test_npc_training_detects_prefixed_central_and_market_controls),
                 ("npc_training_equalize_times_toggle_and_parser", test_npc_training_equalize_times_toggle_and_parser),
                 ("npc_training_equalizes_current_plus_new_time", test_npc_training_equalizes_current_plus_new_time),
                 ("npc_training_equalize_times_requires_training_block", test_npc_training_equalize_times_requires_training_block),
@@ -2087,6 +2301,7 @@ def main():
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
+                ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
                 ("npc_training_mobile_horizontal_scroll", test_npc_training_mobile_horizontal_scroll),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),

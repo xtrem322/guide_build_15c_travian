@@ -40,6 +40,21 @@
           <option value="0.10">10%</option>
         </select>
       </div>
+      <div class="tool">
+        <div class="tool-label">Bono Mercado</div>
+        <select id="globalMarketBonus">
+          <option value="0">0%</option>
+          <option value="0.30">30%</option>
+          <option value="0.60">60%</option>
+          <option value="0.90">90%</option>
+          <option value="1.20">120%</option>
+          <option value="1.50">150%</option>
+        </select>
+      </div>
+      <div class="tool tool-wide">
+        <div class="tool-label">Servidor Travian</div>
+        <input id="trainingServerHost" type="text" value="eternos.x3.hispano.travian.com" placeholder="eternos.x3.hispano.travian.com">
+      </div>
       <label class="training-inline-check">
         <input type="checkbox" id="globalTrooperEnabled">
         <span>Tropero Grande</span>
@@ -118,6 +133,19 @@
         <div class="train-item">
           <div class="tool-label">Aldea central que reparte el NPC</div>
           <select id="trainingCentralVillage"></select>
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Mercado central</div>
+          <div class="training-central-tools">
+            <label class="training-inline-check training-inline-check-boxed">
+              <input type="checkbox" id="trainingTradeOfficeEnabled" checked>
+              <span>Oficina de comercio</span>
+            </label>
+            <div class="tool">
+              <div class="tool-label">Nivel oficina</div>
+              <select id="trainingTradeOfficeLevel"></select>
+            </div>
+          </div>
         </div>
         <div class="training-central-meta" id="trainingCentralMeta"></div>
       </div>
