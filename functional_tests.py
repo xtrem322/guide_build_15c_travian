@@ -984,6 +984,7 @@ def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_
     central_options = [option.text.strip() for option in central_select.options]
     selected_text = central_select.first_selected_option.text.strip()
     market_options = [option.text.strip() for option in Select(driver.find_element(By.ID, "globalMarketBonus")).options]
+    lead_minutes = driver.find_element(By.ID, "trainingLinkLeadMinutes").get_attribute("value")
     marketplace_level = Select(driver.find_element(By.ID, "trainingMarketplaceLevel")).first_selected_option.text.strip()
     office_level = Select(driver.find_element(By.ID, "trainingTradeOfficeLevel")).first_selected_option.text.strip()
     central_meta = driver.find_element(By.ID, "trainingCentralMeta").text
@@ -992,6 +993,7 @@ def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_
     assert central_options == ["[Central] Villa Tormento - Total 946460"], "Si hay centrales detectadas, el combo no debe listar aldeas normales"
     assert selected_text.startswith("[Central] Villa Tormento"), "NPC entrenamiento no auto selecciono la central marcada con prefijo C"
     assert market_options == ["0%", "30%", "60%", "90%", "120%", "150%"], "NPC entrenamiento no agrego las opciones del bono de mercado"
+    assert lead_minutes == "1", "El tiempo extra inicial de links debia empezar en 1 minuto"
     assert marketplace_level == "20", "El nivel de mercado no debia iniciar distinto de 20"
     assert office_level == "20", "La oficina de comercio no debia iniciar en nivel 20"
     assert not destination_cap_enabled, "Usar tope almacen Aldea destino? debia iniciar en NO"
@@ -1758,7 +1760,7 @@ def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
     assert result["rows"][0]["did"] == 32286 and result["rows"][1]["did"] == 32289, "No se resolvio did_dest desde map.sql"
     assert result["rows"][0]["repeat"] == 1, "La aldea cercana no debia dividirse en varios envios"
     assert result["rows"][1]["repeat"] == 2, "La aldea que no calzaba debia dividirse entre 2"
-    assert result["rows"][0]["send"] == "07:00", "La primera salida no se programo a los 2 minutos en hora servidor UTC+1 redondeada a minuto"
+    assert result["rows"][0]["send"] == "06:59", "La primera salida no se programo con el minuto extra inicial en hora servidor UTC+1"
     assert "did_dest=32286" in result["rows"][0]["url"] and "trade_route_mode=send" in result["rows"][0]["url"], "El link generado no siguio el formato esperado"
     assert len(result["opened"]) == 2 and all("build.php?gid=17" in item for item in result["opened"]), "Abrir todo no abrio las rutas comerciales esperadas"
 
@@ -2016,7 +2018,125 @@ def test_npc_training_parallel_merchant_departures_share_same_time(driver, base_
 
     assert "error" not in result, result.get("error")
     assert result["rows"][0]["merchantsNeeded"] == 9 and result["rows"][1]["merchantsNeeded"] == 4, "La prueba no preparo correctamente las dos rutas con 9 y 4 mercaderes"
-    assert result["rows"][0]["send"] == "07:00" and result["rows"][1]["send"] == "07:00", "Si el pool alcanza para ambas rutas, deben salir a la misma hora redondeada a minuto"
+    assert result["rows"][0]["send"] == "06:59" and result["rows"][1]["send"] == "06:59", "Si el pool alcanza para ambas rutas, deben salir a la misma hora usando el minuto extra inicial"
+
+
+def test_npc_training_link_lead_minutes_parameter_changes_first_departure(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const mapSql = arguments[0];
+        const done = arguments[arguments.length - 1];
+        const originalFetch = window.fetch;
+        const originalGetServerTimeFromLocal = getServerTimeFromLocal;
+        const OriginalDate = Date;
+
+        window.fetch = async (url) => ({
+          ok: String(url).includes("/map.sql"),
+          text: async () => mapSql
+        });
+
+        Date = class extends OriginalDate {
+          constructor(...args){
+            if(args.length){
+              super(...args);
+            } else {
+              super("2026-04-12T05:58:00Z");
+            }
+          }
+          static now(){
+            return new OriginalDate("2026-04-12T05:58:00Z").getTime();
+          }
+        };
+        getServerTimeFromLocal = (date) => new OriginalDate(date.getTime() + 6 * 3600000);
+
+        document.getElementById("serverSpeed").value = "1";
+        document.getElementById("globalMarketBonus").value = "0";
+        document.getElementById("trainingTradeOfficeEnabled").checked = false;
+        document.getElementById("trainingMarketplaceLevel").value = "20";
+        document.getElementById("trainingServerHost").value = "eternos.x3.hispano.travian.com";
+        document.getElementById("trainingLinkLeadMinutes").value = "3";
+        syncGlobalTrainingConfigFromDom();
+
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          current: withResourceTotal({ wood: 100000, clay: 100000, iron: 100000, crop: 100000 }),
+          merchantsAvailable: 20,
+          merchantsTotal: 20,
+          hasResources: true
+        };
+        const village = {
+          id: "a",
+          name: "Villa Esperanza",
+          key: "a",
+          sourceOrder: 1,
+          race: "HUNOS",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -166,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+
+        allVillages = [central, village];
+        trainingVillages = [village];
+        trainingCentralKey = "central";
+
+        const plan = {
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 1,
+          villagePlans: [{
+            village,
+            status: "NPC",
+            currentTime: 0,
+            totalTargetSec: 120,
+            counts: [{ label:"C", troopName:"Guardia Ash", units:50 }],
+            deficit: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 })
+          }]
+        };
+
+        generateTrainingTradeLinks(plan).then((rows) => {
+          window.fetch = originalFetch;
+          getServerTimeFromLocal = originalGetServerTimeFromLocal;
+          Date = OriginalDate;
+          done({ send: rows[0]?.sendLabel || "" });
+        }).catch((error) => {
+          window.fetch = originalFetch;
+          getServerTimeFromLocal = originalGetServerTimeFromLocal;
+          Date = OriginalDate;
+          done({ error: error.message || String(error) });
+        });
+        """,
+        MAP_SQL_EXAMPLE
+    )
+
+    assert "error" not in result, result.get("error")
+    assert result["send"] == "07:01", "El parametro de minutos extra no movio la primera salida al minuto configurado"
 
 
 def test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return(driver, base_url):
@@ -3021,6 +3141,7 @@ def main():
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
                 ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
                 ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
+                ("npc_training_link_lead_minutes_parameter_changes_first_departure", test_npc_training_link_lead_minutes_parameter_changes_first_departure),
                 ("npc_training_next_departure_rounds_up_to_minute_after_second_precision_return", test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return),
                 ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
                 ("npc_training_links_table_shows_speed_return_and_total_merchant_capacity", test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity),

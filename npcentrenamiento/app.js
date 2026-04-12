@@ -20,6 +20,7 @@ let trainingMapLookupByServer = {}
 const trainingGlobalConfig = {
   allianceBonus: 0,
   marketBonus: 0,
+  linkLeadMinutes: 1,
   marketplaceLevel: 20,
   useDestinationCapacityCap: false,
   trooperEnabled: false,
@@ -1344,6 +1345,7 @@ function refreshGlobalTrainingControls(){
 function syncGlobalTrainingConfigFromDom(){
   trainingGlobalConfig.allianceBonus = Number($("globalAllianceBonus")?.value || 0)
   trainingGlobalConfig.marketBonus = Number($("globalMarketBonus")?.value || 0)
+  trainingGlobalConfig.linkLeadMinutes = Math.max(0, Math.floor(n0($("trainingLinkLeadMinutes")?.value || 1)))
   trainingGlobalConfig.marketplaceLevel = Math.max(1, Math.floor(n0($("trainingMarketplaceLevel")?.value || 20)))
   if($("useDestinationCapacityCap")) trainingGlobalConfig.useDestinationCapacityCap = Boolean($("useDestinationCapacityCap")?.checked)
   trainingGlobalConfig.trooperEnabled = Boolean($("globalTrooperEnabled")?.checked)
@@ -2110,7 +2112,7 @@ async function generateTrainingTradeLinks(plan){
   const central = allVillages.find(v => v.key === trainingCentralKey)
   if(!central) throw new Error("Selecciona una aldea central.")
   const centralStats = getMerchantStatsForVillage(central)
-  const now = addMinutes(new Date(), 2)
+  const now = addMinutes(new Date(), Math.max(0, Math.floor(n0(trainingGlobalConfig.linkLeadMinutes || 1))))
   const merchantPoolSize = Math.max(1, Math.floor(n0(centralStats.merchantsTotal || centralStats.merchantsAvailable || 1)))
   const merchantFreeAtMs = Array.from({ length: merchantPoolSize }, () => now.getTime())
 
@@ -2677,6 +2679,9 @@ async function init(){
   $("globalMarketBonus").addEventListener("change", () => {
     syncGlobalTrainingConfigFromDom()
     recalc()
+  })
+  $("trainingLinkLeadMinutes").addEventListener("input", () => {
+    syncGlobalTrainingConfigFromDom()
   })
   $("globalTrooperEnabled").addEventListener("change", () => {
     syncGlobalTrainingConfigFromDom()
