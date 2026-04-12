@@ -1875,13 +1875,14 @@ function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occu
     picked.push(pool.shift() ?? baseMs)
   }
 
-  const sendMs = Math.max(baseMs, ...picked)
-  const releaseDate = addSeconds(new Date(sendMs), occupiedSeconds)
+  const earliestReadyMs = Math.max(baseMs, ...picked)
+  const sendDate = ceilDateToMinute(new Date(earliestReadyMs))
+  const releaseDate = addSeconds(sendDate, occupiedSeconds)
   const releaseMs = releaseDate.getTime()
   for(let idx = 0; idx < picked.length; idx++) pool.push(releaseMs)
 
   return {
-    sendDate: new Date(sendMs),
+    sendDate,
     releaseDate
   }
 }
@@ -1900,6 +1901,15 @@ function getSortedVillagePlansForLinks(plan){
 }
 
 function formatDateAsServerHm(date){
+  const serverDate = getServerTimeFromLocal(date)
+  return {
+    hour: serverDate.getHours(),
+    minute: serverDate.getMinutes(),
+    label: `${String(serverDate.getHours()).padStart(2, "0")}:${String(serverDate.getMinutes()).padStart(2, "0")}`
+  }
+}
+
+function formatDateAsServerHms(date){
   const serverDate = getServerTimeFromLocal(date)
   return {
     hour: serverDate.getHours(),
@@ -1981,7 +1991,7 @@ async function generateTrainingTradeLinks(plan){
       merchantSpeed: centralStats.speedTilesPerHour,
       repeat: repeatInfo.repeat,
       sendLabel: sendInfo.label,
-      nextReadyLabel: formatDateAsServerHm(merchantWindow.releaseDate).label,
+      nextReadyLabel: formatDateAsServerHms(merchantWindow.releaseDate).label,
       perTrip: repeatInfo.perTrip,
       perTripTotal: repeatInfo.perTrip.total,
       merchantsNeeded: repeatInfo.merchantsNeeded,

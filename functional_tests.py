@@ -1610,7 +1610,7 @@ def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
     assert result["rows"][0]["did"] == 32286 and result["rows"][1]["did"] == 32289, "No se resolvio did_dest desde map.sql"
     assert result["rows"][0]["repeat"] == 1, "La aldea cercana no debia dividirse en varios envios"
     assert result["rows"][1]["repeat"] == 2, "La aldea que no calzaba debia dividirse entre 2"
-    assert result["rows"][0]["send"] == "07:00:00", "La primera salida no se programo a los 2 minutos en hora servidor UTC+1 con precision a segundos"
+    assert result["rows"][0]["send"] == "07:00", "La primera salida no se programo a los 2 minutos en hora servidor UTC+1 redondeada a minuto"
     assert "did_dest=32286" in result["rows"][0]["url"] and "trade_route_mode=send" in result["rows"][0]["url"], "El link generado no siguio el formato esperado"
     assert len(result["opened"]) == 2 and all("build.php?gid=17" in item for item in result["opened"]), "Abrir todo no abrio las rutas comerciales esperadas"
 
@@ -1868,7 +1868,30 @@ def test_npc_training_parallel_merchant_departures_share_same_time(driver, base_
 
     assert "error" not in result, result.get("error")
     assert result["rows"][0]["merchantsNeeded"] == 9 and result["rows"][1]["merchantsNeeded"] == 4, "La prueba no preparo correctamente las dos rutas con 9 y 4 mercaderes"
-    assert result["rows"][0]["send"] == "07:00:00" and result["rows"][1]["send"] == "07:00:00", "Si el pool alcanza para ambas rutas, deben salir a la misma hora con precision a segundos"
+    assert result["rows"][0]["send"] == "07:00" and result["rows"][1]["send"] == "07:00", "Si el pool alcanza para ambas rutas, deben salir a la misma hora redondeada a minuto"
+
+
+def test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const windowInfo = reserveMerchantWindow(
+          [new Date("2026-04-12T09:24:20Z").getTime()],
+          1,
+          new Date("2026-04-12T09:20:00Z"),
+          75
+        );
+        return {
+          send: formatDateAsServerHm(windowInfo.sendDate).label,
+          returnAt: formatDateAsServerHms(windowInfo.releaseDate).label
+        };
+        """
+    )
+
+    assert result["send"] == "10:25", "La siguiente salida no se redondeo al minuto superior cuando el mercader regresaba con segundos"
+    assert result["returnAt"] == "10:26:15", "El regreso no mantuvo la precision por segundos tras redondear la salida"
 
 
 def test_npc_training_calculate_links_does_not_open_preview(driver, base_url):
@@ -1961,7 +1984,7 @@ def test_npc_training_calculate_links_does_not_open_preview(driver, base_url):
           didDest: 32286,
           travelSeconds: 120,
           repeat: 1,
-          sendLabel: "07:00:00",
+          sendLabel: "07:00",
           nextReadyLabel: "07:04:00",
           perTrip: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
           perTripTotal: 1000,
@@ -2006,7 +2029,7 @@ def test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity
           distance: 1,
           distanceLabel: "1.00",
           didDest: 32286,
-          sendLabel: "07:36:15",
+          sendLabel: "07:36",
           merchantSpeed: 16,
           travelSeconds: 75,
           nextReadyLabel: "07:38:45",
@@ -2848,6 +2871,7 @@ def main():
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
                 ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
                 ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
+                ("npc_training_next_departure_rounds_up_to_minute_after_second_precision_return", test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return),
                 ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
                 ("npc_training_links_table_shows_speed_return_and_total_merchant_capacity", test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity),
                 ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
