@@ -1994,6 +1994,44 @@ def test_npc_training_calculate_links_does_not_open_preview(driver, base_url):
     assert result["opened"] == [], "Calcular links no debe abrir ninguna pestaña; solo debe llenar la matriz inferior"
 
 
+def test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        trainingLastGeneratedLinks = [{
+          villageKey: "villa-a",
+          villageName: "Villa Esperanza",
+          distance: 1,
+          distanceLabel: "1.00",
+          didDest: 32286,
+          sendLabel: "07:36",
+          merchantSpeed: 16,
+          travelMinutes: 2,
+          nextReadyLabel: "07:44",
+          repeat: 2,
+          perTripTotal: 149388,
+          merchantsNeeded: 9,
+          capacityEach: 18000,
+          merchantTotalCapacity: 162000,
+          fitDetail: "Entra completo",
+          overMerchantCapacity: false,
+          url: "https://example.com"
+        }];
+        return {
+          html: renderTrainingLinksTable(trainingLastGeneratedLinks)
+        };
+        """
+    )
+
+    assert "Vel." in result["html"], "La tabla de links no agrego la columna de velocidad de mercaderes"
+    assert "Regreso" in result["html"], "La tabla de links no agrego la columna de hora de regreso"
+    assert "16 c/h" in result["html"], "La tabla de links no mostro la velocidad de mercaderes en casillas por hora"
+    assert "07:44" in result["html"], "La tabla de links no mostro la hora final de regreso"
+    assert "9 x 18000 = 162000" in result["html"], "La tabla de links no mostro la capacidad total de mercaderes usados"
+
+
 def test_npc_training_shows_link_progress_feedback(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -2811,6 +2849,7 @@ def main():
                 ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
                 ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
                 ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
+                ("npc_training_links_table_shows_speed_return_and_total_merchant_capacity", test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity),
                 ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
                 ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),

@@ -1973,6 +1973,7 @@ async function generateTrainingTradeLinks(plan){
       distanceLabel: getVillageDistanceLabel(central, item.village),
       didDest: item.village.did,
       travelMinutes,
+      merchantSpeed: centralStats.speedTilesPerHour,
       repeat: repeatInfo.repeat,
       sendLabel: sendInfo.label,
       nextReadyLabel: formatDateAsServerHm(merchantWindow.releaseDate).label,
@@ -1980,6 +1981,7 @@ async function generateTrainingTradeLinks(plan){
       perTripTotal: repeatInfo.perTrip.total,
       merchantsNeeded: repeatInfo.merchantsNeeded,
       capacityEach: centralStats.capacityEach,
+      merchantTotalCapacity: repeatInfo.merchantsNeeded * centralStats.capacityEach,
       fitDetail: repeatInfo.fit.detail,
       fitOk: repeatInfo.fit.fits,
       overMerchantCapacity: Boolean(repeatInfo.overMerchantCapacity),
@@ -2082,6 +2084,58 @@ function renderTrainingLinksTable(rows){
               <td>${fmtInt(item.repeat)}</td>
               <td>${fmtInt(item.perTripTotal)}</td>
               <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)}</td>
+              <td>${escapeHtml(item.fitDetail)}${item.overMerchantCapacity ? " · Espera mercaderes" : ""}</td>
+              <td><a class="btn btn-orange training-link-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Enviar</a></td>
+            </tr>
+          `
+        }).join("")}
+      </tbody>
+    </table>
+  `
+}
+
+function renderTrainingLinksTable(rows){
+  if(!rows.length) return `<div class="training-empty">Todavia no hay links calculados.</div>`
+  return `
+    <table class="training-transfer-table training-links-table">
+      <thead>
+        <tr>
+          <th class="left">Aldea</th>
+          <th>Dist.</th>
+          <th>did</th>
+          <th>Salida</th>
+          <th>Vel.</th>
+          <th>Viaje</th>
+          <th>Regreso</th>
+          <th>Repeat</th>
+          <th>Total viaje</th>
+          <th>Merc.</th>
+          <th>Detalle</th>
+          <th>Enviar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(item => {
+          if(item.error){
+            return `
+              <tr>
+                <td class="left">${escapeHtml(item.villageName)}</td>
+                <td colspan="11" class="left training-link-error">${escapeHtml(item.error)}</td>
+              </tr>
+            `
+          }
+          return `
+            <tr>
+              <td class="left">${escapeHtml(item.villageName)}</td>
+              <td>${escapeHtml(item.distanceLabel)}</td>
+              <td>${fmtInt(item.didDest)}</td>
+              <td>${escapeHtml(item.sendLabel)}</td>
+              <td>${fmtInt(item.merchantSpeed)} c/h</td>
+              <td>${fmtTime(item.travelMinutes * 60)}</td>
+              <td>${escapeHtml(item.nextReadyLabel)}</td>
+              <td>${fmtInt(item.repeat)}</td>
+              <td>${fmtInt(item.perTripTotal)}</td>
+              <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)} = ${fmtInt(item.merchantTotalCapacity)}</td>
               <td>${escapeHtml(item.fitDetail)}${item.overMerchantCapacity ? " · Espera mercaderes" : ""}</td>
               <td><a class="btn btn-orange training-link-btn" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Enviar</a></td>
             </tr>
