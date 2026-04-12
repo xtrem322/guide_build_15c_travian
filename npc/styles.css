@@ -349,6 +349,37 @@ select,input{
   font:inherit;
 }
 
+.training-textarea-small{
+  min-height:110px;
+}
+
+.training-map-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+
+.training-file-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.training-map-status{
+  color:var(--muted);
+  font-weight:700;
+}
+
+.training-map-status.is-ok{
+  color:var(--ok);
+}
+
+.training-map-status.is-bad{
+  color:var(--danger);
+}
+
 .training-actions{
   display:flex;
   align-items:center;

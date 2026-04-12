@@ -227,6 +227,11 @@ INSERT INTO `vdata` VALUES (32288,'FGE Villa Charizard',83,-168,915,17,0,0,0,0,0
 INSERT INTO `vdata` VALUES (32289,'FR Ojitos Rojos',81,-168,915,17,0,0,0,0,0,0,0,0,0,0);
 """
 
+MAP_SQL_X_WORLD_EXAMPLE = """INSERT INTO `x_world` VALUES (146650,84,-165,6,35068,'Villa Tormento',915,'Team_Tocabolus',17,'SAQ 1',961,NULL,FALSE,NULL,NULL,NULL);
+INSERT INTO `x_world` VALUES (147051,84,-166,7,32286,'FH Villa Esperanza',915,'Team_Tocabolus',17,'SAQ 1',982,NULL,FALSE,NULL,NULL,NULL);
+INSERT INTO `x_world` VALUES (147049,82,-166,7,39483,'FH Ojitos Rojos',915,'Team_Tocabolus',17,'SAQ 1',740,NULL,FALSE,NULL,NULL,NULL);
+"""
+
 TRAINING_NAME_REPLACEMENTS = {
     "Villa Esperanza": "FH: Villa Esperanza",
     "Villa EmociÃ³n": "FGA: Villa EmociÃ³n",
@@ -1608,6 +1613,108 @@ def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
     assert len(result["opened"]) == 2 and all("build.php?gid=17" in item for item in result["opened"]), "Abrir todo no abrio las rutas comerciales esperadas"
 
 
+def test_npc_training_uses_project_root_map_sql(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const mapSql = arguments[0];
+        const originalFetch = window.fetch;
+
+        window.fetch = async (url) => {
+          const textUrl = String(url || "");
+          if (textUrl.startsWith(window.location.origin) && textUrl.includes("/map.sql")) {
+            return { ok: true, text: async () => mapSql };
+          }
+          throw new Error("Remote blocked");
+        };
+
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          merchantsAvailable: 20,
+          merchantsTotal: 20,
+          current: withResourceTotal({ wood: 200000, clay: 200000, iron: 200000, crop: 200000 }),
+          hasResources: true
+        };
+        const village = {
+          id: "villa-a",
+          name: "Villa Esperanza",
+          key: "villa-a",
+          sourceOrder: 1,
+          race: "HUNOS",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -166,
+          did: 0,
+          warehouseCap: 10000,
+          granaryCap: 10000,
+          merchantsAvailable: 10,
+          merchantsTotal: 10,
+          current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          hasResources: true
+        };
+
+        allVillages = [central, village];
+        trainingVillages = [village];
+        trainingCentralKey = "central";
+        trainingLastGeneratedLinks = [];
+        document.getElementById("trainingServerHost").value = "eternos.x3.hispano.travian.com";
+        syncGlobalTrainingConfigFromDom();
+
+        const plan = {
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 1,
+          villagePlans: [{
+            village,
+            status: "NPC",
+            currentTime: 0,
+            totalTargetSec: 120,
+            counts: [{ label:"C", troopName:"Guardia Ash", units:50 }],
+            deficit: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 })
+          }]
+        };
+
+        generateTrainingTradeLinks(plan).then((rows) => {
+          const status = document.getElementById("trainingMapSqlStatus").textContent || "";
+          window.fetch = originalFetch;
+          done({
+            rows: rows.map(item => ({ village: item.villageName, did: item.didDest, url: item.url })),
+            status
+          });
+        }).catch((error) => {
+          window.fetch = originalFetch;
+          done({ error: error.message || String(error) });
+        });
+        """,
+        MAP_SQL_X_WORLD_EXAMPLE
+    )
+
+    assert "error" not in result, result.get("error")
+    assert result["rows"][0]["did"] == 32286, "NPC entrenamiento no tomo el did desde el map.sql del proyecto en formato x_world"
+    assert "proyecto" in result["status"].lower(), "NPC entrenamiento no indico que estaba usando el map.sql local del proyecto"
+
+
 def test_npc_training_shows_link_progress_feedback(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -2422,6 +2529,7 @@ def main():
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
+                ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
                 ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
                 ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),

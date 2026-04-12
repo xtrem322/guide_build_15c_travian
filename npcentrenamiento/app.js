@@ -662,11 +662,48 @@ function addMinutes(date, minutes){
   return new Date(date.getTime() + Math.max(0, n0(minutes)) * 60000)
 }
 
+function updateTrainingMapSqlStatus(message, tone){
+  const status = $("trainingMapSqlStatus")
+  if(!status) return
+  status.className = "training-map-status"
+  if(tone === "ok") status.classList.add("is-ok")
+  if(tone === "bad") status.classList.add("is-bad")
+  status.textContent = message
+}
+
+function getManualTrainingMapSqlText(){
+  return String($("trainingMapSqlInput")?.value || "").trim()
+}
+
+function parseManualTrainingMapSql(){
+  const text = getManualTrainingMapSqlText()
+  if(!text) return null
+  const lookup = parseMapSqlToLookup(text)
+  const count = Object.keys(lookup).length
+  if(!count) throw new Error("El map.sql manual no contiene registros validos de aldeas.")
+  return { lookup, count }
+}
+
+function refreshTrainingMapSqlStatus(){
+  const manualText = getManualTrainingMapSqlText()
+  if(!manualText){
+    updateTrainingMapSqlStatus("Si el servidor bloquea map.sql, pegalo aqui o carga el archivo para generar los links.", "")
+    return
+  }
+  try {
+    const parsed = parseManualTrainingMapSql()
+    updateTrainingMapSqlStatus(`map.sql manual listo: ${fmtInt(parsed?.count)} aldeas detectadas.`, "ok")
+  } catch (error){
+    updateTrainingMapSqlStatus("El map.sql manual no parece valido. Debe contener inserts de aldeas.", "bad")
+  }
+}
+
 function parseMapSqlToLookup(sqlText){
   const lookup = {}
-  const insertRegex = /INSERT INTO\s+`vdata`\s+VALUES\s*(.+?);/gis
+  const text = String(sqlText || "")
+  const vdataInsertRegex = /INSERT INTO\s+`vdata`\s+VALUES\s*(.+?);/gis
   let insertMatch
-  while((insertMatch = insertRegex.exec(String(sqlText || ""))) !== null){
+  while((insertMatch = vdataInsertRegex.exec(text)) !== null){
     const valuesChunk = insertMatch[1]
     const rowRegex = /\((\d+),'((?:\\'|[^'])*)',(-?\d+),(-?\d+),/g
     let rowMatch
@@ -677,19 +714,66 @@ function parseMapSqlToLookup(sqlText){
       lookup[`${x},${y}`] = did
     }
   }
+
+  const xWorldInsertRegex = /INSERT INTO\s+`x_world`\s+VALUES\s*(.+?);/gis
+  while((insertMatch = xWorldInsertRegex.exec(text)) !== null){
+    const valuesChunk = insertMatch[1]
+    const rowRegex = /\(\s*\d+\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*\d+\s*,\s*(\d+)\s*,/g
+    let rowMatch
+    while((rowMatch = rowRegex.exec(valuesChunk)) !== null){
+      const x = Math.floor(n0(rowMatch[1]))
+      const y = Math.floor(n0(rowMatch[2]))
+      const did = Math.floor(n0(rowMatch[3]))
+      if(did > 0) lookup[`${x},${y}`] = did
+    }
+  }
   return lookup
 }
 
 async function getMapDidLookup(serverHost){
   const host = String(serverHost || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")
-  if(!host) throw new Error("Define un servidor valido para consultar map.sql.")
+  const manual = parseManualTrainingMapSql()
+  if(manual){
+    updateTrainingMapSqlStatus(`Usando map.sql manual: ${fmtInt(manual.count)} aldeas detectadas.`, "ok")
+    return manual.lookup
+  }
+
+  const localProjectUrl = new URL("../map.sql", window.location.href).toString()
+  try {
+    const localResponse = await fetch(localProjectUrl, { cache: "no-store" })
+    if(localResponse.ok){
+      const localText = await localResponse.text()
+      const localLookup = parseMapSqlToLookup(localText)
+      const localCount = Object.keys(localLookup).length
+      if(localCount){
+        updateTrainingMapSqlStatus(`Usando map.sql del proyecto: ${fmtInt(localCount)} aldeas detectadas.`, "ok")
+        return localLookup
+      }
+    }
+  } catch (_error){
+    // Seguimos con la descarga remota.
+  }
+
+  if(!host){
+    updateTrainingMapSqlStatus("Falta servidor Travian o map.sql manual para generar los links.", "bad")
+    throw new Error("Define un servidor valido o carga map.sql para consultar los did.")
+  }
   if(trainingMapLookupByServer[host]) return trainingMapLookupByServer[host]
 
   const response = await fetch(`https://${host}/map.sql`, { cache: "no-store" })
-  if(!response.ok) throw new Error(`HTTP ${response.status} al cargar map.sql desde ${host}.`)
+  if(!response.ok){
+    updateTrainingMapSqlStatus("No se pudo descargar map.sql del servidor. Usa el map.sql local del proyecto o cargalo manualmente.", "bad")
+    throw new Error(`HTTP ${response.status} al cargar map.sql desde ${host}.`)
+  }
   const text = await response.text()
   const lookup = parseMapSqlToLookup(text)
+  const count = Object.keys(lookup).length
+  if(!count){
+    updateTrainingMapSqlStatus("Se descargo map.sql pero no se encontraron aldeas validas. Usa el archivo local o manual.", "bad")
+    throw new Error(`El map.sql descargado desde ${host} no contiene aldeas validas.`)
+  }
   trainingMapLookupByServer[host] = lookup
+  updateTrainingMapSqlStatus(`Usando map.sql remoto: ${fmtInt(count)} aldeas detectadas.`, "ok")
   return lookup
 }
 
@@ -1885,11 +1969,12 @@ function sanitizeTrainingLinkError(error){
   const raw = String(error?.message || error || "").trim()
   if(!raw) return "No se pudieron generar los links. Revisa el servidor y vuelve a intentar."
   if(/No hay un plan NPC valido/i.test(raw)) return "Primero genera un plan NPC valido."
-  if(/Define el servidor/i.test(raw)) return "Define el servidor Travian antes de calcular links."
+  if(/Define el servidor|carga map\.sql/i.test(raw)) return "Define el servidor Travian o usa el map.sql del proyecto, pegado o cargado manualmente."
   if(/Selecciona una aldea central/i.test(raw)) return "Selecciona una aldea central para calcular los links."
-  if(/Failed to fetch|NetworkError|Load failed|ERR_/i.test(raw)) return "No se pudo conectar con el servidor para descargar map.sql."
-  if(/HTTP\s+\d+/i.test(raw) && /map\.sql/i.test(raw)) return "No se pudo descargar map.sql del servidor configurado."
-  if(/map\.sql/i.test(raw)) return "No se pudo leer map.sql. Revisa el servidor configurado e intenta otra vez."
+  if(/manual no contiene registros validos/i.test(raw)) return "El map.sql manual no parece valido. Debe contener las aldeas del mapa."
+  if(/Failed to fetch|NetworkError|Load failed|ERR_/i.test(raw)) return "No se pudo conectar con el servidor para descargar map.sql. Usa el map.sql del proyecto o cargalo manualmente."
+  if(/HTTP\s+\d+/i.test(raw) && /map\.sql/i.test(raw)) return "No se pudo descargar map.sql del servidor configurado. Usa el map.sql del proyecto o cargalo manualmente."
+  if(/map\.sql/i.test(raw)) return "No se pudo leer map.sql. Usa el archivo del proyecto o cargalo manualmente."
   return "No se pudieron generar los links. Revisa coordenadas, servidor y vuelve a intentar."
 }
 
@@ -1971,6 +2056,17 @@ function renderTrainingLinksTable(rows){
       </tbody>
     </table>
   `
+}
+
+async function readTrainingMapSqlFile(file){
+  if(!file) return ""
+  if(typeof file.text === "function") return file.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo map.sql."))
+    reader.readAsText(file)
+  })
 }
 
 function openTrainingLinksPreview(rows){
@@ -2312,6 +2408,27 @@ async function init(){
   $("trainingServerHost").addEventListener("input", () => {
     syncGlobalTrainingConfigFromDom()
   })
+  $("trainingMapSqlInput").addEventListener("input", () => {
+    refreshTrainingMapSqlStatus()
+  })
+  $("trainingMapSqlFile").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0]
+    if(!file) return
+    try {
+      $("trainingMapSqlInput").value = await readTrainingMapSqlFile(file)
+      refreshTrainingMapSqlStatus()
+      showStatus(`OK. map.sql cargado: ${file.name}`, "ok")
+    } catch (error){
+      updateTrainingMapSqlStatus("No se pudo leer el archivo map.sql.", "bad")
+      showStatus("No se pudo leer el archivo map.sql.", "bad")
+    } finally {
+      event.target.value = ""
+    }
+  })
+  $("btnClearTrainingMapSql").addEventListener("click", () => {
+    $("trainingMapSqlInput").value = ""
+    refreshTrainingMapSqlStatus()
+  })
   $("trainingTradeOfficeEnabled").addEventListener("change", () => {
     syncGlobalTrainingConfigFromDom()
     recalc()
@@ -2344,6 +2461,7 @@ async function init(){
     recalc()
   })
 
+  refreshTrainingMapSqlStatus()
   recalc()
 }
 

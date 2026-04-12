@@ -124,6 +124,19 @@
         </div>
       </div>
 
+      <div class="training-import-grid">
+        <div class="train-item train-item-wide">
+          <div class="tool-label">map.sql manual (opcional)</div>
+          <textarea id="trainingMapSqlInput" class="training-textarea training-textarea-small" placeholder="Si el servidor bloquea map.sql, pega aqui el contenido del archivo o cargalo con el boton inferior"></textarea>
+          <div class="training-map-actions">
+            <label class="btn training-file-btn" for="trainingMapSqlFile">Cargar archivo map.sql</label>
+            <input id="trainingMapSqlFile" type="file" accept=".sql,text/plain" hidden>
+            <button class="btn" id="btnClearTrainingMapSql" type="button">Limpiar map.sql</button>
+            <div class="training-map-status" id="trainingMapSqlStatus">Si el servidor bloquea map.sql, pegalo aqui o carga el archivo para generar los links.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="training-actions">
         <button class="btn btn-orange" id="btnImportTraining" type="button">Importar aldeas</button>
         <div class="training-import-status" id="trainingImportStatus">Sin datos importados.</div>
@@ -178,6 +191,7 @@
         <br>4. Configura que entrena cada aldea y ajusta niveles, tropero o cascos segun corresponda.
         <br>5. Si marcas <strong>Igualar Tiempos?</strong>, pega tambien el bloque de <strong>Training</strong>; asi el calculo iguala por edificio <strong>cuartel, establo y taller</strong> usando <strong>tiempo actual corriendo + tiempo nuevo</strong> solo en las colas configuradas.
         <br>6. Revisa el plan final: <strong>Entre 2</strong> y <strong>Entre 3</strong> dividen el envio, <strong>Enviado?</strong> te ayuda a marcar progreso y la papelera quita aldeas del ejercicio.
+        <br>7. Si al calcular links falla la descarga remota, usa <strong>map.sql manual</strong>: descarga el archivo, pegalo o cargalo y vuelve a calcular.
       </div>
     </div>
   </div>
