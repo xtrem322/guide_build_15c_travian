@@ -21,6 +21,7 @@ const trainingGlobalConfig = {
   allianceBonus: 0,
   marketBonus: 0,
   marketplaceLevel: 20,
+  useDestinationCapacityCap: false,
   trooperEnabled: false,
   trooperBoost: 0,
   helmetEnabled: false,
@@ -264,6 +265,15 @@ function getResourceSurplus(current, required){
     clay: Math.max(0, n0(current?.clay) - n0(required?.clay)),
     iron: Math.max(0, n0(current?.iron) - n0(required?.iron)),
     crop: Math.max(0, n0(current?.crop) - n0(required?.crop))
+  })
+}
+
+function getVillageIncomingCapacityRoom(village){
+  return withResourceTotal({
+    wood: Math.max(0, Math.floor(n0(village?.warehouseCap) - n0(village?.current?.wood))),
+    clay: Math.max(0, Math.floor(n0(village?.warehouseCap) - n0(village?.current?.clay))),
+    iron: Math.max(0, Math.floor(n0(village?.warehouseCap) - n0(village?.current?.iron))),
+    crop: Math.max(0, Math.floor(n0(village?.granaryCap) - n0(village?.current?.crop)))
   })
 }
 
@@ -962,7 +972,57 @@ function findVillageCurrentTime(village){
   return lo
 }
 
-function evaluateTrainingTarget(targetSec){
+function doesVillageRequirementFitDestinationCapacity(village, required){
+  const deficit = positiveDeficit(required, village?.current)
+  const room = getVillageIncomingCapacityRoom(village)
+  return deficit.wood <= room.wood &&
+    deficit.clay <= room.clay &&
+    deficit.iron <= room.iron &&
+    deficit.crop <= room.crop
+}
+
+function findVillageDestinationCapacityTarget(village, desiredTargetSec){
+  const desired = Math.max(0, Math.floor(n0(desiredTargetSec)))
+  if(desired <= 0) return 0
+
+  let lo = 0
+  let hi = desired
+  while(lo < hi){
+    const mid = Math.floor((lo + hi + 1) / 2)
+    const req = getTrainingRequirement(village, mid)
+    if(doesVillageRequirementFitDestinationCapacity(village, req.resources)) lo = mid
+    else hi = mid - 1
+  }
+  return lo
+}
+
+function findVillageDestinationCapacityUpperBound(village){
+  const probe = getTrainingRequirement(village, 1)
+  if(!probe.queues.length) return 0
+
+  let lo = 0
+  let hi = 3600
+  const maxSec = 60 * 60 * 24 * 30
+
+  while(hi < maxSec){
+    const req = getTrainingRequirement(village, hi)
+    if(!doesVillageRequirementFitDestinationCapacity(village, req.resources)) break
+    lo = hi
+    hi *= 2
+  }
+
+  hi = Math.min(hi, maxSec)
+  while(lo < hi){
+    const mid = Math.floor((lo + hi + 1) / 2)
+    const req = getTrainingRequirement(village, mid)
+    if(doesVillageRequirementFitDestinationCapacity(village, req.resources)) lo = mid
+    else hi = mid - 1
+  }
+
+  return lo
+}
+
+function buildTrainingPlanForTargets(getTargetSec, options = {}){
   const activeVillages = getEffectiveTrainingVillages()
   if(!activeVillages.length) return { feasible:false, reason:"Importa aldeas primero." }
 
@@ -970,11 +1030,14 @@ function evaluateTrainingTarget(targetSec){
   if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
 
   const equalizedByCurrent = isEqualTrainingTimeModeEnabled()
+  const useDestinationCapacityCap = Boolean(options.useDestinationCapacityCap)
   const plans = []
   let activeQueues = 0
 
   for(const village of activeVillages){
-    const req = getTrainingRequirement(village, targetSec)
+    const requestedTargetSec = Math.max(0, Math.floor(n0(getTargetSec(village))))
+    let effectiveTargetSec = requestedTargetSec
+    let req = getTrainingRequirement(village, effectiveTargetSec)
     const currentTime = equalizedByCurrent ? req.maxCurrentSec : findVillageCurrentTime(village)
 
     if(!req.queues.length){
@@ -983,7 +1046,8 @@ function evaluateTrainingTarget(targetSec){
         currentTime,
         currentTrainingByQueue: zeroTrainingQueueTimes(),
         requestedTrainingByQueue: zeroTrainingQueueTimes(),
-        totalTargetSec: Math.floor(n0(targetSec)),
+        requestedTargetSec,
+        totalTargetSec: 0,
         required: zeroResources(),
         deficit: zeroResources(),
         deficitBeforeVillageSupport: zeroResources(),
@@ -991,9 +1055,17 @@ function evaluateTrainingTarget(targetSec){
         supportFromVillages: zeroResources(),
         supportFromCentral: zeroResources(),
         counts: [],
+        cappedByDestination: false,
         status: "Sin colas"
       })
       continue
+    }
+
+    if(useDestinationCapacityCap){
+      effectiveTargetSec = findVillageDestinationCapacityTarget(village, requestedTargetSec)
+      if(effectiveTargetSec !== requestedTargetSec){
+        req = getTrainingRequirement(village, effectiveTargetSec)
+      }
     }
 
     activeQueues += req.queues.length
@@ -1002,7 +1074,8 @@ function evaluateTrainingTarget(targetSec){
       currentTime,
       currentTrainingByQueue: req.currentTrainingByQueue,
       requestedTrainingByQueue: req.requestedTrainingByQueue,
-      totalTargetSec: Math.floor(n0(targetSec)),
+      requestedTargetSec,
+      totalTargetSec: effectiveTargetSec,
       required: req.resources,
       deficit: zeroResources(),
       deficitBeforeVillageSupport: positiveDeficit(req.resources, village.current),
@@ -1010,6 +1083,7 @@ function evaluateTrainingTarget(targetSec){
       supportFromVillages: zeroResources(),
       supportFromCentral: zeroResources(),
       counts: req.counts,
+      cappedByDestination: useDestinationCapacityCap && effectiveTargetSec < requestedTargetSec,
       status: "Lista"
     })
   }
@@ -1022,7 +1096,7 @@ function evaluateTrainingTarget(targetSec){
   const villageTransfers = []
   let remainingVillageSupportNeed = Math.max(0, n0(initialNpcNeed.total) - n0(central.current?.total))
 
-  if(remainingVillageSupportNeed > 0){
+  if(remainingVillageSupportNeed > 0 && !useDestinationCapacityCap){
     for(const resource of RESOURCE_KEYS){
       const donors = plans
         .filter(item => n0(item.surplus?.[resource]) > 0)
@@ -1081,8 +1155,9 @@ function evaluateTrainingTarget(targetSec){
 
   return {
     feasible: true,
-    targetSec,
+    targetSec: Math.max(0, ...plans.map(item => Math.max(0, n0(item.totalTargetSec)))),
     equalizedByCurrent,
+    usesDestinationCapacityCap: useDestinationCapacityCap,
     villagePlans: plans,
     totalTransfer: centralNpcNeed,
     villageTransfers,
@@ -1092,7 +1167,97 @@ function evaluateTrainingTarget(targetSec){
   }
 }
 
+function evaluateTrainingTarget(targetSec, options = {}){
+  const desiredTargetSec = Math.max(0, Math.floor(n0(targetSec)))
+  return buildTrainingPlanForTargets(() => desiredTargetSec, options)
+}
+
+function evaluateTrainingTargetsMap(targetByVillageKey, options = {}){
+  const map = targetByVillageKey || {}
+  return buildTrainingPlanForTargets((village) => n0(map[village.key]), options)
+}
+
+function findBestTrainingPlanUsingDestinationCapacity(){
+  const queuedVillages = getEffectiveTrainingVillages().filter(village => getTrainingRequirement(village, 1).queues.length > 0)
+  const capByVillageKey = {}
+  let maxCapTargetSec = 0
+
+  for(const village of queuedVillages){
+    const capTargetSec = findVillageDestinationCapacityUpperBound(village)
+    capByVillageKey[village.key] = capTargetSec
+    maxCapTargetSec = Math.max(maxCapTargetSec, capTargetSec)
+  }
+
+  let lo = 0
+  let hi = maxCapTargetSec
+  let bestPlan = evaluateTrainingTarget(0, { useDestinationCapacityCap: true })
+
+  while(lo < hi){
+    const mid = Math.floor((lo + hi + 1) / 2)
+    const probe = evaluateTrainingTarget(mid, { useDestinationCapacityCap: true })
+    if(probe.feasible){
+      bestPlan = probe
+      lo = mid
+    } else {
+      hi = mid - 1
+    }
+  }
+
+  let currentLevel = lo
+  const targetByVillageKey = {}
+  for(const village of queuedVillages){
+    targetByVillageKey[village.key] = Math.min(currentLevel, capByVillageKey[village.key])
+  }
+  bestPlan = evaluateTrainingTargetsMap(targetByVillageKey, { useDestinationCapacityCap: true })
+
+  let activeVillages = queuedVillages.filter(village => capByVillageKey[village.key] > n0(targetByVillageKey[village.key]))
+  while(activeVillages.length){
+    const nextCapLevel = activeVillages.reduce((min, village) => Math.min(min, capByVillageKey[village.key]), Infinity)
+    let low = currentLevel
+    let high = nextCapLevel
+    let roundBestPlan = bestPlan
+
+    while(low < high){
+      const mid = Math.floor((low + high + 1) / 2)
+      const probeTargets = { ...targetByVillageKey }
+      for(const village of activeVillages){
+        probeTargets[village.key] = mid
+      }
+      const probe = evaluateTrainingTargetsMap(probeTargets, { useDestinationCapacityCap: true })
+      if(probe.feasible){
+        roundBestPlan = probe
+        low = mid
+      } else {
+        high = mid - 1
+      }
+    }
+
+    currentLevel = low
+    for(const village of activeVillages){
+      targetByVillageKey[village.key] = currentLevel
+    }
+    bestPlan = roundBestPlan
+
+    if(currentLevel < nextCapLevel) break
+    activeVillages = activeVillages.filter(village => capByVillageKey[village.key] > currentLevel)
+  }
+
+  const finalLevel = Math.max(0, ...((bestPlan?.villagePlans) || []).map(item => Math.max(0, n0(item.totalTargetSec))))
+  if(bestPlan?.villagePlans?.length){
+    bestPlan.targetSec = finalLevel
+    bestPlan.villagePlans = bestPlan.villagePlans.map(item => ({
+      ...item,
+      cappedByDestination: Boolean(item.counts?.length) && n0(item.totalTargetSec) < finalLevel
+    }))
+  }
+
+  return bestPlan
+}
+
 function findBestTrainingPlan(){
+  if(isDestinationCapacityLimitEnabled()){
+    return findBestTrainingPlanUsingDestinationCapacity()
+  }
   const minTargetSec = isEqualTrainingTimeModeEnabled()
     ? getEffectiveTrainingVillages().reduce((max, village) => {
       const queues = buildTrainingQueues(village)
@@ -1180,6 +1345,7 @@ function syncGlobalTrainingConfigFromDom(){
   trainingGlobalConfig.allianceBonus = Number($("globalAllianceBonus")?.value || 0)
   trainingGlobalConfig.marketBonus = Number($("globalMarketBonus")?.value || 0)
   trainingGlobalConfig.marketplaceLevel = Math.max(1, Math.floor(n0($("trainingMarketplaceLevel")?.value || 20)))
+  trainingGlobalConfig.useDestinationCapacityCap = Boolean($("useDestinationCapacityCap")?.checked)
   trainingGlobalConfig.trooperEnabled = Boolean($("globalTrooperEnabled")?.checked)
   trainingGlobalConfig.trooperBoost = Number($("globalTrooperBoost")?.value || 0)
   trainingGlobalConfig.helmetEnabled = Boolean($("globalHelmetEnabled")?.checked)
@@ -1192,6 +1358,10 @@ function syncGlobalTrainingConfigFromDom(){
 
 function isEqualTrainingTimeModeEnabled(){
   return Boolean($("equalizeTrainingTimes")?.checked)
+}
+
+function isDestinationCapacityLimitEnabled(){
+  return Boolean(trainingGlobalConfig.useDestinationCapacityCap)
 }
 
 function refreshTrainingTimeModeControls(){
@@ -1775,6 +1945,12 @@ function getRenderedVillagePlans(plan){
 }
 
 function getVillageCapacityFit(village, deficit){
+  if(isDestinationCapacityLimitEnabled()){
+    return {
+      fits: true,
+      detail: "Si calza"
+    }
+  }
   const warehouseCap = Math.max(0, Math.floor(n0(village?.warehouseCap)))
   const granaryCap = Math.max(0, Math.floor(n0(village?.granaryCap)))
   const future = withResourceTotal({
@@ -2272,7 +2448,12 @@ function renderTrainingResult(plan){
           const splitFactor = getSplitFactorForVillage(item.village.key)
           const deliveredClass = item.village.isDelivered ? " is-delivered" : ""
           const totalToSend = withResourceTotal(item.deficit)
-          const capacityFit = getVillageCapacityFit(item.village, item.deficit)
+          const capacityFit = plan.usesDestinationCapacityCap
+            ? {
+              fits: true,
+              detail: item.cappedByDestination ? "Si calza · Tope destino aplicado" : "Si calza"
+            }
+            : getVillageCapacityFit(item.village, item.deficit)
           return `
             <tr class="training-transfer-row${deliveredClass}" data-village-key="${item.village.key}">
               <td>
@@ -2510,6 +2691,11 @@ async function init(){
   })
   $("equalizeTrainingTimes").addEventListener("change", () => {
     refreshTrainingTimeModeControls()
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
+  $("useDestinationCapacityCap").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
     recalc()
   })
   $("trainingServerHost").addEventListener("input", () => {

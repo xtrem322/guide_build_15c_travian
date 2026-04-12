@@ -987,12 +987,14 @@ def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_
     marketplace_level = Select(driver.find_element(By.ID, "trainingMarketplaceLevel")).first_selected_option.text.strip()
     office_level = Select(driver.find_element(By.ID, "trainingTradeOfficeLevel")).first_selected_option.text.strip()
     central_meta = driver.find_element(By.ID, "trainingCentralMeta").text
+    destination_cap_enabled = driver.find_element(By.ID, "useDestinationCapacityCap").is_selected()
 
     assert central_options == ["[Central] Villa Tormento - Total 946460"], "Si hay centrales detectadas, el combo no debe listar aldeas normales"
     assert selected_text.startswith("[Central] Villa Tormento"), "NPC entrenamiento no auto selecciono la central marcada con prefijo C"
     assert market_options == ["0%", "30%", "60%", "90%", "120%", "150%"], "NPC entrenamiento no agrego las opciones del bono de mercado"
     assert marketplace_level == "20", "El nivel de mercado no debia iniciar distinto de 20"
     assert office_level == "20", "La oficina de comercio no debia iniciar en nivel 20"
+    assert not destination_cap_enabled, "Usar tope almacen Aldea destino? debia iniciar en NO"
     assert "EGIPTO" in central_meta, "NPC entrenamiento no mostro la raza de la central detectada"
     assert "(84|-165)" in central_meta, "NPC entrenamiento no mostro las coordenadas parseadas de la central"
 
@@ -1436,6 +1438,151 @@ def test_npc_training_total_and_capacity_fit_columns(driver, base_url):
     assert result["fitA"].startswith("SI"), "CALZA? debia indicar SI cuando todos los recursos entran en almacen/granero"
     assert result["totalB"].startswith("45000"), "La columna Total no sumo correctamente la segunda fila"
     assert result["fitB"].startswith("NO"), "CALZA? debia indicar NO cuando algun recurso supera la capacidad"
+
+
+def test_npc_training_destination_capacity_mode_uses_only_central_and_keeps_optimizing(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const originalGetTrainingRequirement = getTrainingRequirement;
+        const originalFindVillageCurrentTime = findVillageCurrentTime;
+        const previousMode = trainingGlobalConfig.useDestinationCapacityCap;
+        try {
+          const fake = (name, key, current, isTraining, warehouseCap, granaryCap, sourceOrder) => ({
+            id: key,
+            name,
+            key,
+            sourceOrder,
+            race: "ROMANO",
+            raceSupported: true,
+            isTraining,
+            warehouseCap,
+            granaryCap,
+            current: withResourceTotal(current),
+            hasResources: true,
+            barracksTroop: "X",
+            stableTroop: "",
+            workshopTroop: "",
+            barracksLvl: 1,
+            stableLvl: 1,
+            workshopLvl: 1,
+            allyBonus: 0,
+            trooperBoost: 0,
+            helmetBarracks: 0,
+            helmetStable: 0
+          });
+
+          trainingGlobalConfig.useDestinationCapacityCap = true;
+          allVillages = [
+            fake("Central", "central", { wood: 500, clay: 0, iron: 0, crop: 0 }, false, 999999, 999999, 0),
+            fake("FR Aldea A", "a", { wood: 0, clay: 0, iron: 0, crop: 0 }, true, 100, 999999, 1),
+            fake("FR Aldea B", "b", { wood: 0, clay: 0, iron: 0, crop: 0 }, true, 999999, 999999, 2)
+          ];
+          trainingVillages = allVillages.filter(v => v.isTraining);
+          trainingCentralKey = "central";
+
+          getTrainingRequirement = (village, targetSec) => {
+            if(village.key === "a" || village.key === "b"){
+              return {
+                queues: [{ label:"C" }],
+                counts: [{ label:"C", troopName:"Imperiano", units: Math.max(0, targetSec) }],
+                resources: withResourceTotal({ wood: Math.max(0, targetSec), clay: 0, iron: 0, crop: 0 }),
+                currentTrainingByQueue: withTrainingQueueTimes({ C: 0, E: 0, T: 0 }),
+                requestedTrainingByQueue: withTrainingQueueTimes({ C: Math.max(0, targetSec), E: 0, T: 0 }),
+                maxCurrentSec: 0,
+                maxRequestedSec: Math.max(0, targetSec)
+              };
+            }
+            return {
+              queues: [],
+              counts: [],
+              resources: zeroResources(),
+              currentTrainingByQueue: zeroTrainingQueueTimes(),
+              requestedTrainingByQueue: zeroTrainingQueueTimes(),
+              maxCurrentSec: 0,
+              maxRequestedSec: 0
+            };
+          };
+          findVillageCurrentTime = () => 0;
+
+          const plan = findBestTrainingPlan();
+          return {
+            feasible: plan.feasible,
+            totalWood: plan.totalTransfer.wood,
+            transferCount: plan.villageTransfers.length,
+            usesDestinationCapacityCap: Boolean(plan.usesDestinationCapacityCap),
+            targets: plan.villagePlans.map(item => ({
+              key: item.village.key,
+              targetSec: item.totalTargetSec,
+              wood: item.deficit.wood,
+              capped: Boolean(item.cappedByDestination)
+            }))
+          };
+        } finally {
+          getTrainingRequirement = originalGetTrainingRequirement;
+          findVillageCurrentTime = originalFindVillageCurrentTime;
+          trainingGlobalConfig.useDestinationCapacityCap = previousMode;
+        }
+        """
+    )
+
+    by_key = {item["key"]: item for item in result["targets"]}
+    assert result["feasible"], "Con tope de destino, NPC entrenamiento debia seguir encontrando un plan valido"
+    assert result["usesDestinationCapacityCap"], "El plan no marco que estaba usando el modo de tope en aldea destino"
+    assert result["transferCount"] == 0, "Con tope de destino activo no debian existir envios entre aldeas"
+    assert result["totalWood"] == 500, "Con tope de destino activo debia seguir agotando la madera disponible en la central"
+    assert by_key["a"]["targetSec"] == 100 and by_key["a"]["wood"] == 100 and by_key["a"]["capped"], "La aldea limitada por almacen no quedo capada al tope correcto"
+    assert by_key["b"]["targetSec"] == 400 and by_key["b"]["wood"] == 400, "La otra aldea no siguio optimizando el tiempo con el sobrante de la central"
+
+
+def test_npc_training_capacity_fit_column_is_forced_to_yes_in_destination_cap_mode(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        trainingGlobalConfig.useDestinationCapacityCap = true;
+        const villageA = {
+          key: "villa-a",
+          name: "Villa A",
+          sourceOrder: 0,
+          current: withResourceTotal({ wood: 330000, clay: 10000, iron: 5000, crop: 49000 }),
+          warehouseCap: 350000,
+          granaryCap: 50000
+        };
+
+        renderTrainingResult({
+          feasible: true,
+          usesDestinationCapacityCap: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 1,
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              currentTime: 0,
+              totalTargetSec: 60,
+              counts: [{ label:"C", troopName:"Imperiano", units:100 }],
+              deficit: withResourceTotal({ wood: 40000, clay: 2000, iron: 1000, crop: 2000 }),
+              cappedByDestination: true
+            }
+          ]
+        });
+
+        return {
+          fit: document.querySelector('[data-village-key="villa-a"] td:nth-child(11)').textContent.trim()
+        };
+        """
+    )
+
+    assert result["fit"].startswith("SI"), "Con tope de destino activo, CALZA? debia mostrarse siempre en SI"
+    assert "Tope destino aplicado" in result["fit"], "La matriz debia explicar que la aldea estaba limitada por su tope de almacen/granero"
 
 
 def test_npc_training_generates_trade_links_from_map_sql(driver, base_url):
@@ -2868,6 +3015,8 @@ def main():
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
+                ("npc_training_destination_capacity_mode_uses_only_central_and_keeps_optimizing", test_npc_training_destination_capacity_mode_uses_only_central_and_keeps_optimizing),
+                ("npc_training_capacity_fit_column_is_forced_to_yes_in_destination_cap_mode", test_npc_training_capacity_fit_column_is_forced_to_yes_in_destination_cap_mode),
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
                 ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
                 ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
