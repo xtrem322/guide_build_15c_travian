@@ -20,6 +20,7 @@ let trainingMapLookupByServer = {}
 const trainingGlobalConfig = {
   allianceBonus: 0,
   marketBonus: 0,
+  marketplaceLevel: 20,
   trooperEnabled: false,
   trooperBoost: 0,
   helmetEnabled: false,
@@ -614,15 +615,21 @@ function getMerchantStatsForVillage(village){
   const base = MERCHANT_BASE_STATS[race] || { capacity: 500, speed: 16 }
   const serverSpeed = Math.max(1, n0($("serverSpeed")?.value || 1))
   const marketBonus = Math.max(0, n0(trainingGlobalConfig.marketBonus))
+  const marketplaceLevel = Math.max(1, Math.floor(n0(trainingGlobalConfig.marketplaceLevel || 20)))
   const officeBonus = trainingGlobalConfig.tradeOfficeEnabled ? getTradeOfficeBonus(trainingGlobalConfig.tradeOfficeLevel, race) : 0
   const capacityEach = Math.max(1, Math.floor(base.capacity * serverSpeed * (1 + marketBonus) * (1 + officeBonus)))
   const speedTilesPerHour = Math.max(1, base.speed * serverSpeed)
+  const parsedMerchantsTotal = Math.max(0, Math.floor(n0(village?.merchantsTotal)))
+  const parsedMerchantsAvailable = Math.max(0, Math.floor(n0(village?.merchantsAvailable)))
+  const merchantsTotal = Math.max(1, parsedMerchantsTotal || marketplaceLevel)
+  const merchantsAvailable = Math.max(0, parsedMerchantsAvailable || merchantsTotal)
   return {
     race,
     capacityEach,
     speedTilesPerHour,
-    merchantsAvailable: Math.max(0, Math.floor(n0(village?.merchantsAvailable))),
-    merchantsTotal: Math.max(0, Math.floor(n0(village?.merchantsTotal))),
+    merchantsAvailable,
+    merchantsTotal,
+    marketplaceLevel,
     officeBonus,
     marketBonus
   }
@@ -1168,6 +1175,7 @@ function refreshGlobalTrainingControls(){
 function syncGlobalTrainingConfigFromDom(){
   trainingGlobalConfig.allianceBonus = Number($("globalAllianceBonus")?.value || 0)
   trainingGlobalConfig.marketBonus = Number($("globalMarketBonus")?.value || 0)
+  trainingGlobalConfig.marketplaceLevel = Math.max(1, Math.floor(n0($("trainingMarketplaceLevel")?.value || 20)))
   trainingGlobalConfig.trooperEnabled = Boolean($("globalTrooperEnabled")?.checked)
   trainingGlobalConfig.trooperBoost = Number($("globalTrooperBoost")?.value || 0)
   trainingGlobalConfig.helmetEnabled = Boolean($("globalHelmetEnabled")?.checked)
@@ -1723,7 +1731,7 @@ function updateTrainingCentralSelect(){
       <div class="training-central-card">
         <div class="training-central-card-label">Mercaderes</div>
         <div class="training-central-card-value">${centralStats.merchantsAvailable} / ${centralStats.merchantsTotal}</div>
-        <div class="training-central-card-help">Capacidad c/u: ${fmtInt(centralStats.capacityEach)} · Velocidad: ${fmtInt(centralStats.speedTilesPerHour)} casillas/h</div>
+        <div class="training-central-card-help">Mercado nv ${fmtInt(centralStats.marketplaceLevel)} · Capacidad c/u: ${fmtInt(centralStats.capacityEach)} · Velocidad: ${fmtInt(centralStats.speedTilesPerHour)} casillas/h</div>
       </div>
       <div class="training-central-card">
         <div class="training-central-card-label">Raza / mapa</div>
@@ -1852,6 +1860,28 @@ function getTravelMinutesBetweenVillages(origin, target, speedTilesPerHour){
   return Math.max(0, Math.ceil(minutes))
 }
 
+function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occupiedMinutes){
+  const baseMs = Math.max(0, new Date(earliestDate instanceof Date ? earliestDate.getTime() : Date.now()).getTime())
+  const pool = Array.isArray(freeAtMsList) ? freeAtMsList : []
+  const needed = Math.max(1, Math.min(Math.floor(n0(merchantsNeeded || 1)), Math.max(1, pool.length)))
+  const picked = []
+
+  pool.sort((a, b) => a - b)
+  for(let idx = 0; idx < needed; idx++){
+    picked.push(pool.shift() ?? baseMs)
+  }
+
+  const sendMs = Math.max(baseMs, ...picked)
+  const releaseDate = ceilDateToMinute(addMinutes(new Date(sendMs), occupiedMinutes))
+  const releaseMs = releaseDate.getTime()
+  for(let idx = 0; idx < picked.length; idx++) pool.push(releaseMs)
+
+  return {
+    sendDate: new Date(sendMs),
+    releaseDate
+  }
+}
+
 function getSortedVillagePlansForLinks(plan){
   return (Array.isArray(plan?.villagePlans) ? plan.villagePlans : [])
     .slice()
@@ -1890,7 +1920,8 @@ async function generateTrainingTradeLinks(plan){
   if(!central) throw new Error("Selecciona una aldea central.")
   const centralStats = getMerchantStatsForVillage(central)
   const now = ceilDateToMinute(addMinutes(new Date(), 2))
-  let cursor = now
+  const merchantPoolSize = Math.max(1, Math.floor(n0(centralStats.merchantsTotal || centralStats.merchantsAvailable || 1)))
+  const merchantFreeAtMs = Array.from({ length: merchantPoolSize }, () => now.getTime())
 
   const rows = []
   for(const item of getSortedVillagePlansForLinks(plan)){
@@ -1914,9 +1945,14 @@ async function generateTrainingTradeLinks(plan){
 
     const repeatInfo = chooseRepeatAndPayload(item.village, item.deficit, centralStats)
     const travelMinutes = getTravelMinutesBetweenVillages(central, item.village, centralStats.speedTilesPerHour)
-    const sendInfo = formatDateAsServerHm(cursor)
     const roundTripMinutes = Math.max(0, travelMinutes * 2 * repeatInfo.repeat)
-    const nextCursor = ceilDateToMinute(addMinutes(cursor, roundTripMinutes))
+    const merchantWindow = reserveMerchantWindow(
+      merchantFreeAtMs,
+      repeatInfo.merchantsNeeded,
+      now,
+      roundTripMinutes
+    )
+    const sendInfo = formatDateAsServerHm(merchantWindow.sendDate)
     const url = buildTradeRouteUrl({
       serverHost,
       didDest: item.village.did,
@@ -1939,7 +1975,7 @@ async function generateTrainingTradeLinks(plan){
       travelMinutes,
       repeat: repeatInfo.repeat,
       sendLabel: sendInfo.label,
-      nextReadyLabel: formatDateAsServerHm(nextCursor).label,
+      nextReadyLabel: formatDateAsServerHm(merchantWindow.releaseDate).label,
       perTrip: repeatInfo.perTrip,
       perTripTotal: repeatInfo.perTrip.total,
       merchantsNeeded: repeatInfo.merchantsNeeded,
@@ -1949,8 +1985,6 @@ async function generateTrainingTradeLinks(plan){
       overMerchantCapacity: Boolean(repeatInfo.overMerchantCapacity),
       url
     })
-
-    cursor = nextCursor
   }
 
   trainingLastGeneratedLinks = rows
@@ -2268,7 +2302,6 @@ function renderTrainingResult(plan){
           message: `${fmtInt(rows.filter(item => item.url).length)} links generados.`
         }
         renderTrainingResult(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
-        openTrainingLinksPreview(rows)
         showStatus(`OK. Links generados: ${fmtInt(rows.filter(item => item.url).length)}`, "ok")
       } catch (error){
         trainingLinksUiState = {
@@ -2364,6 +2397,11 @@ async function init(){
     value: String(idx),
     label: String(idx)
   })), false)
+  fillSelect($("trainingMarketplaceLevel"), Array.from({ length: 20 }, (_, idx) => ({
+    value: String(idx + 1),
+    label: String(idx + 1)
+  })), false)
+  $("trainingMarketplaceLevel").value = "20"
   $("trainingTradeOfficeLevel").value = "20"
 
   syncGlobalTrainingConfigFromDom()
@@ -2430,6 +2468,10 @@ async function init(){
     refreshTrainingMapSqlStatus()
   })
   $("trainingTradeOfficeEnabled").addEventListener("change", () => {
+    syncGlobalTrainingConfigFromDom()
+    recalc()
+  })
+  $("trainingMarketplaceLevel").addEventListener("change", () => {
     syncGlobalTrainingConfigFromDom()
     recalc()
   })

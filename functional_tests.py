@@ -984,12 +984,14 @@ def test_npc_training_detects_prefixed_central_and_market_controls(driver, base_
     central_options = [option.text.strip() for option in central_select.options]
     selected_text = central_select.first_selected_option.text.strip()
     market_options = [option.text.strip() for option in Select(driver.find_element(By.ID, "globalMarketBonus")).options]
+    marketplace_level = Select(driver.find_element(By.ID, "trainingMarketplaceLevel")).first_selected_option.text.strip()
     office_level = Select(driver.find_element(By.ID, "trainingTradeOfficeLevel")).first_selected_option.text.strip()
     central_meta = driver.find_element(By.ID, "trainingCentralMeta").text
 
     assert central_options == ["[Central] Villa Tormento - Total 946460"], "Si hay centrales detectadas, el combo no debe listar aldeas normales"
     assert selected_text.startswith("[Central] Villa Tormento"), "NPC entrenamiento no auto selecciono la central marcada con prefijo C"
     assert market_options == ["0%", "30%", "60%", "90%", "120%", "150%"], "NPC entrenamiento no agrego las opciones del bono de mercado"
+    assert marketplace_level == "20", "El nivel de mercado no debia iniciar distinto de 20"
     assert office_level == "20", "La oficina de comercio no debia iniciar en nivel 20"
     assert "EGIPTO" in central_meta, "NPC entrenamiento no mostro la raza de la central detectada"
     assert "(84|-165)" in central_meta, "NPC entrenamiento no mostro las coordenadas parseadas de la central"
@@ -1713,6 +1715,283 @@ def test_npc_training_uses_project_root_map_sql(driver, base_url):
     assert "error" not in result, result.get("error")
     assert result["rows"][0]["did"] == 32286, "NPC entrenamiento no tomo el did desde el map.sql del proyecto en formato x_world"
     assert "proyecto" in result["status"].lower(), "NPC entrenamiento no indico que estaba usando el map.sql local del proyecto"
+
+
+def test_npc_training_parallel_merchant_departures_share_same_time(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const mapSql = arguments[0];
+        const done = arguments[arguments.length - 1];
+        const originalFetch = window.fetch;
+        const originalGetServerTimeFromLocal = getServerTimeFromLocal;
+        const OriginalDate = Date;
+
+        window.fetch = async (url) => ({
+          ok: String(url).includes("/map.sql"),
+          text: async () => mapSql
+        });
+
+        Date = class extends OriginalDate {
+          constructor(...args){
+            if(args.length){
+              super(...args);
+            } else {
+              super("2026-04-12T05:58:00Z");
+            }
+          }
+          static now(){
+            return new OriginalDate("2026-04-12T05:58:00Z").getTime();
+          }
+        };
+        getServerTimeFromLocal = (date) => new OriginalDate(date.getTime() + 6 * 3600000);
+
+        document.getElementById("serverSpeed").value = "1";
+        document.getElementById("globalMarketBonus").value = "0";
+        document.getElementById("trainingTradeOfficeEnabled").checked = false;
+        document.getElementById("trainingMarketplaceLevel").value = "20";
+        document.getElementById("trainingServerHost").value = "eternos.x3.hispano.travian.com";
+        syncGlobalTrainingConfigFromDom();
+
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          current: withResourceTotal({ wood: 100000, clay: 100000, iron: 100000, crop: 100000 }),
+          merchantsAvailable: 20,
+          merchantsTotal: 20,
+          hasResources: true
+        };
+        const villageA = {
+          id: "a",
+          name: "Villa Esperanza",
+          key: "a",
+          sourceOrder: 1,
+          race: "HUNOS",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -166,
+          did: 0,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+        const villageB = {
+          id: "b",
+          name: "Villa Emoción",
+          key: "b",
+          sourceOrder: 2,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -164,
+          did: 0,
+          warehouseCap: 999999,
+          granaryCap: 999999,
+          current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+
+        allVillages = [central, villageA, villageB];
+        trainingVillages = [villageA, villageB];
+        trainingCentralKey = "central";
+
+        const plan = {
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 9750, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 2,
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              currentTime: 0,
+              totalTargetSec: 120,
+              counts: [{ label:"C", troopName:"Arquero", units:100 }],
+              deficit: withResourceTotal({ wood: 6750, clay: 0, iron: 0, crop: 0 })
+            },
+            {
+              village: villageB,
+              status: "NPC",
+              currentTime: 0,
+              totalTargetSec: 120,
+              counts: [{ label:"C", troopName:"Guardia Ash", units:100 }],
+              deficit: withResourceTotal({ wood: 3000, clay: 0, iron: 0, crop: 0 })
+            }
+          ]
+        };
+
+        generateTrainingTradeLinks(plan).then((rows) => {
+          window.fetch = originalFetch;
+          getServerTimeFromLocal = originalGetServerTimeFromLocal;
+          Date = OriginalDate;
+          done({
+            rows: rows.map(item => ({
+              village: item.villageName,
+              send: item.sendLabel,
+              merchantsNeeded: item.merchantsNeeded
+            }))
+          });
+        }).catch((error) => {
+          window.fetch = originalFetch;
+          getServerTimeFromLocal = originalGetServerTimeFromLocal;
+          Date = OriginalDate;
+          done({ error: error.message || String(error) });
+        });
+        """,
+        MAP_SQL_EXAMPLE
+    )
+
+    assert "error" not in result, result.get("error")
+    assert result["rows"][0]["merchantsNeeded"] == 9 and result["rows"][1]["merchantsNeeded"] == 4, "La prueba no preparo correctamente las dos rutas con 9 y 4 mercaderes"
+    assert result["rows"][0]["send"] == "07:00" and result["rows"][1]["send"] == "07:00", "Si el pool alcanza para ambas rutas, deben salir a la misma hora"
+
+
+def test_npc_training_calculate_links_does_not_open_preview(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const originalGenerateTrainingTradeLinks = generateTrainingTradeLinks;
+        const originalOpen = window.open;
+        const originalShowStatus = showStatus;
+        window.__opened = [];
+        window.open = (url) => {
+          window.__opened.push(url || "preview");
+          return {
+            document: { write(){}, close(){} }
+          };
+        };
+
+        const central = {
+          id: "central",
+          name: "Villa Tormento",
+          key: "central",
+          sourceOrder: 0,
+          race: "EGIPTO",
+          raceSupported: true,
+          isTraining: false,
+          isCentral: true,
+          x: 84,
+          y: -165,
+          warehouseCap: 400000,
+          granaryCap: 880000,
+          merchantsAvailable: 20,
+          merchantsTotal: 20,
+          current: withResourceTotal({ wood: 100000, clay: 100000, iron: 100000, crop: 100000 }),
+          hasResources: true
+        };
+        const village = {
+          id: "villa-a",
+          name: "Villa Esperanza",
+          key: "villa-a",
+          sourceOrder: 1,
+          race: "HUNOS",
+          raceSupported: true,
+          isTraining: true,
+          isCentral: false,
+          x: 84,
+          y: -166,
+          did: 32286,
+          warehouseCap: 10000,
+          granaryCap: 10000,
+          current: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          merchantsAvailable: 0,
+          merchantsTotal: 0,
+          hasResources: true
+        };
+
+        allVillages = [central, village];
+        trainingVillages = [village];
+        trainingCentralKey = "central";
+        trainingLastGeneratedLinks = [];
+        trainingLinksUiState = { status: "idle", message: "" };
+
+        const plan = {
+          feasible: true,
+          targetSec: 120,
+          equalizedByCurrent: false,
+          totalTransfer: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central,
+          centralAvailable: withResourceTotal(central.current),
+          activeQueues: 1,
+          villagePlans: [{
+            village,
+            status: "NPC",
+            currentTime: 0,
+            totalTargetSec: 120,
+            counts: [{ label:"C", troopName:"Guardia Ash", units:50 }],
+            deficit: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 })
+          }]
+        };
+
+        generateTrainingTradeLinks = async () => {
+          trainingLastGeneratedLinks = [{
+          villageKey: village.key,
+          villageName: village.name,
+          distance: 1,
+          distanceLabel: "1.00",
+          didDest: 32286,
+          travelMinutes: 2,
+          repeat: 1,
+          sendLabel: "07:00",
+          nextReadyLabel: "07:04",
+          perTrip: withResourceTotal({ wood: 1000, clay: 0, iron: 0, crop: 0 }),
+          perTripTotal: 1000,
+          merchantsNeeded: 1,
+          capacityEach: 18000,
+          fitDetail: "Entra completo",
+          fitOk: true,
+          overMerchantCapacity: false,
+          url: "https://eternos.x3.hispano.travian.com/build.php?gid=17&t=3&did_dest=32286&r1=1000&r2=0&r3=0&r4=0&trade_route_mode=send&hour=7&minute=0&repeat=1&every=24&action=traderoute"
+          }];
+          return trainingLastGeneratedLinks;
+        };
+
+        showStatus = () => {};
+        renderTrainingResult(plan);
+        document.getElementById("btnCalculateTrainingLinks").click();
+
+        setTimeout(() => {
+          const rowCount = document.querySelectorAll(".training-links-table tbody tr").length;
+          const opened = window.__opened.slice();
+          generateTrainingTradeLinks = originalGenerateTrainingTradeLinks;
+          window.open = originalOpen;
+          showStatus = originalShowStatus;
+          done({ rowCount, opened });
+        }, 50);
+        """
+    )
+
+    assert result["rowCount"] == 1, "Calcular links no lleno la matriz inferior de rutas comerciales"
+    assert result["opened"] == [], "Calcular links no debe abrir ninguna pestaña; solo debe llenar la matriz inferior"
 
 
 def test_npc_training_shows_link_progress_feedback(driver, base_url):
@@ -2530,6 +2809,8 @@ def main():
                 ("npc_training_total_and_capacity_fit_columns", test_npc_training_total_and_capacity_fit_columns),
                 ("npc_training_generates_trade_links_from_map_sql", test_npc_training_generates_trade_links_from_map_sql),
                 ("npc_training_uses_project_root_map_sql", test_npc_training_uses_project_root_map_sql),
+                ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
+                ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
                 ("npc_training_shows_link_progress_feedback", test_npc_training_shows_link_progress_feedback),
                 ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
