@@ -671,6 +671,12 @@ function ceilDateToMinute(date){
   return next
 }
 
+function ceilReturnedMerchantReadyDate(date){
+  const next = ceilDateToMinute(date)
+  if(date.getSeconds() === 0 && date.getMilliseconds() === 0) next.setMinutes(next.getMinutes() + 1)
+  return next
+}
+
 function getServerTimeFromLocal(date){
   const base = new Date(date instanceof Date ? date.getTime() : Date.now())
   const utcMs = base.getTime() + base.getTimezoneOffset() * 60000
@@ -2055,7 +2061,9 @@ function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occu
   }
 
   const earliestReadyMs = Math.max(baseMs, ...picked)
-  const sendDate = ceilDateToMinute(new Date(earliestReadyMs))
+  const sendDate = earliestReadyMs > baseMs
+    ? ceilReturnedMerchantReadyDate(new Date(earliestReadyMs))
+    : ceilDateToMinute(new Date(earliestReadyMs))
   const releaseDate = addSeconds(sendDate, occupiedSeconds)
   const releaseMs = releaseDate.getTime()
   for(let idx = 0; idx < picked.length; idx++) pool.push(releaseMs)

@@ -2162,6 +2162,29 @@ def test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_
     assert result["returnAt"] == "10:26:15", "El regreso no mantuvo la precision por segundos tras redondear la salida"
 
 
+def test_npc_training_next_departure_adds_one_extra_minute_when_return_is_exact_minute(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_script(
+        """
+        const windowInfo = reserveMerchantWindow(
+          [new Date("2026-04-12T09:24:00Z").getTime()],
+          1,
+          new Date("2026-04-12T09:20:00Z"),
+          90
+        );
+        return {
+          send: formatDateAsServerHm(windowInfo.sendDate).label,
+          returnAt: formatDateAsServerHms(windowInfo.releaseDate).label
+        };
+        """
+    )
+
+    assert result["send"] == "10:25", "Si el mercader regresaba exacto al minuto, la siguiente salida debia sumar un minuto extra de margen"
+    assert result["returnAt"] == "10:26:30", "El regreso final no mantuvo correctamente el nuevo minuto de margen"
+
+
 def test_npc_training_calculate_links_does_not_open_preview(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -3199,6 +3222,7 @@ def main():
                 ("npc_training_parallel_merchant_departures_share_same_time", test_npc_training_parallel_merchant_departures_share_same_time),
                 ("npc_training_link_lead_minutes_parameter_changes_first_departure", test_npc_training_link_lead_minutes_parameter_changes_first_departure),
                 ("npc_training_next_departure_rounds_up_to_minute_after_second_precision_return", test_npc_training_next_departure_rounds_up_to_minute_after_second_precision_return),
+                ("npc_training_next_departure_adds_one_extra_minute_when_return_is_exact_minute", test_npc_training_next_departure_adds_one_extra_minute_when_return_is_exact_minute),
                 ("npc_training_calculate_links_does_not_open_preview", test_npc_training_calculate_links_does_not_open_preview),
                 ("npc_training_links_table_shows_speed_return_and_total_merchant_capacity", test_npc_training_links_table_shows_speed_return_and_total_merchant_capacity),
                 ("npc_training_send_button_changes_color_after_click", test_npc_training_send_button_changes_color_after_click),
