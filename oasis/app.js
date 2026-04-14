@@ -232,6 +232,124 @@ function simulateSyncPool(){
     troopsByName,
   }
 }
+function runGroupSimulation(jobs, poolByTroop, interval){
+  const MAX_CYCLES = 500
+  const EPS = 1e-6
+  const troopNames = Object.keys(poolByTroop).sort()
+  const available = {}
+  troopNames.forEach(name=>{ available[name] = poolByTroop[name] || 0 })
+
+  let returns = []
+
+  function releaseUpTo(t){
+    const keep = []
+    for(const ret of returns){
+      if(ret.returnAt <= t + EPS){
+        for(const [name, qty] of Object.entries(ret.counts)){
+          available[name] = (available[name] || 0) + qty
+        }
+      } else {
+        keep.push(ret)
+      }
+    }
+    returns = keep
+  }
+
+  function stateKey(t){
+    const availKey = troopNames.map(name=>`${name}:${available[name] || 0}`).join(",")
+    const buckets = new Map()
+
+    for(const ret of returns){
+      const dt = ret.returnAt - t
+      const step = Math.max(0, Math.ceil((dt - EPS) / interval))
+      if(!buckets.has(step)) buckets.set(step, {})
+      const bucketCounts = buckets.get(step)
+      for(const [name, qty] of Object.entries(ret.counts)){
+        bucketCounts[name] = (bucketCounts[name] || 0) + qty
+      }
+    }
+
+    const bucketKey = [...buckets.entries()]
+      .sort((a,b)=>a[0]-b[0])
+      .map(([step, counts])=>{
+        const countsKey = troopNames
+          .filter(name=>counts[name] > 0)
+          .map(name=>`${name}:${counts[name]}`)
+          .join(",")
+        return `${step}:${countsKey}`
+      })
+      .join("|")
+
+    return `${availKey}||${bucketKey}`
+  }
+
+  let prevPreKey = null
+
+  for(let cycle=1; cycle<=MAX_CYCLES; cycle++){
+    const t = cycle * interval
+    releaseUpTo(t)
+
+    const preKey = stateKey(t)
+    if(prevPreKey !== null && preKey === prevPreKey){
+      return { ok:true, cycles: cycle }
+    }
+    prevPreKey = preKey
+
+    for(const job of jobs){
+      for(const [name, qty] of Object.entries(job.counts)){
+        if((available[name] || 0) < qty){
+          return { ok:false, cycles: cycle }
+        }
+      }
+      for(const [name, qty] of Object.entries(job.counts)){
+        available[name] -= qty
+      }
+      returns.push({ returnAt: t + job.tIV, counts: job.counts })
+    }
+  }
+
+  return { ok:true, cycles: MAX_CYCLES }
+}
+
+function simulateSyncGroupPool(){
+  const interval = currentInterval()
+  const jobs = []
+  const troopsByName = {}
+
+  for(const oasis of oasisList){
+    const active = oasis.troops.filter(tr=>tr.name && tr.qty>0)
+    if(!active.length) continue
+
+    const {tIda, tIV, grps} = calcOasis(oasis)
+    if(!isFinite(tIda)||!isFinite(tIV)||grps<=0) continue
+
+    const counts = {}
+    for(const tr of active){
+      counts[tr.name] = (counts[tr.name] || 0) + tr.qty
+      troopsByName[tr.name] = (troopsByName[tr.name] || 0) + (grps * tr.qty)
+    }
+
+    jobs.push({
+      oasisId: oasis.id,
+      counts,
+      tIda,
+      tIV,
+      groups: grps,
+    })
+  }
+
+  if(jobs.length===0) return {troopsNeeded:0, cyclesStable:0, troopsByName:{}}
+
+  const sim = runGroupSimulation(jobs, troopsByName, interval)
+  const cyclesStable = sim.ok ? sim.cycles : Math.max(...jobs.map(job=>job.groups)) + 1
+
+  return {
+    troopsNeeded: Object.values(troopsByName).reduce((sum, qty)=>sum+qty, 0),
+    cyclesStable,
+    troopsByName,
+  }
+}
+
 function calcOasis(oasis){
   const srv=currentSpeed(), interval=currentInterval()
   const active=oasis.troops.filter(t=>t.name&&t.qty>0)
@@ -389,7 +507,7 @@ function recalcGlobal(){
 
   if(!oasisList.length){ grEl.style.display="none"; return }
 
-  const {troopsByName, cyclesStable} = simulateSyncPool()
+  const {troopsByName, cyclesStable} = simulateSyncGroupPool()
   const entries=Object.entries(troopsByName).filter(([,v])=>v>0)
   if(!entries.length){ grEl.style.display="none"; return }
 

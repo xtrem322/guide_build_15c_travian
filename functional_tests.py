@@ -434,9 +434,9 @@ def test_oasis(driver, base_url):
     }
     assert chip_values == {
         "Merodeador": "7",
-        "Jinete estepario": "6",
-        "Jinete certero": "6",
-    }, "Oasis no calculo bien el pool sincronizado por tipo de tropa"
+        "Jinete estepario": "7",
+        "Jinete certero": "7",
+    }, "Oasis no calculo bien el pool sincronizado por combo de oasis"
 
 
 def test_vacas(driver, base_url):
