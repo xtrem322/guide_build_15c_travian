@@ -59,7 +59,7 @@ function troopsForRace(r) { return TROOPS_BY_RACE[r]||[] }
    - "Estado estable": todos los ciclos desde C en adelante son idénticos
      (ningún oasis queda sin ataque)
    ══════════════════════════════════════════════════════════════════ */
-function simulate(){
+function simulateLegacyBinarySearch(){
   const srv      = currentSpeed()
   const interval = currentInterval()
 
@@ -183,6 +183,55 @@ function runSimulation(jobs, poolSize, interval){
   return { ok:true, cycles: MAX_CYCLES };
 }
 /* ── Resultado de simulación para mostrar por oasis (tIda, tIV, grps del slowest) ── */
+// Ruta activa para calcular el pool minimo en envios sincronizados.
+function simulateSyncPool(){
+  const srv = currentSpeed()
+  const interval = currentInterval()
+  const jobsByTroop = new Map()
+
+  for(const oasis of oasisList){
+    for(const tr of oasis.troops){
+      if(!tr.name||tr.qty<=0) continue
+      const tIda = travelMin(oasis.dist, tr.name, srv)
+      if(!isFinite(tIda)||tIda<=0) continue
+
+      const job = {
+        oasisId: oasis.id,
+        troopName: tr.name,
+        cant: tr.qty,
+        tIda,
+        tIV: tIda*2,
+        groups: Math.max(1, Math.ceil((tIda * 2) / interval)),
+      }
+
+      if(!jobsByTroop.has(tr.name)) jobsByTroop.set(tr.name, [])
+      jobsByTroop.get(tr.name).push(job)
+    }
+  }
+
+  if(jobsByTroop.size===0) return {troopsNeeded:0, cyclesStable:0, troopsByName:{}}
+
+  const resultByTroop = {}
+  for(const [troopName, jobs] of jobsByTroop.entries()){
+    // En un envio sincronizado, cada oasis ocupa `groups` tandas simultaneas.
+    const needed = jobs.reduce((sum, job)=>sum + (job.groups * job.cant), 0)
+    const sim = runSimulation(jobs, needed, interval)
+    resultByTroop[troopName] = {
+      needed,
+      cycles: sim.ok ? sim.cycles : Math.max(...jobs.map(job=>job.groups)) + 1,
+    }
+  }
+
+  const troopsByName = {}
+  for(const [name, result] of Object.entries(resultByTroop)) troopsByName[name]=result.needed
+  const cyclesStable = Math.max(...Object.values(resultByTroop).map(result=>result.cycles))
+
+  return {
+    troopsNeeded: Object.values(troopsByName).reduce((sum, qty)=>sum+qty, 0),
+    cyclesStable,
+    troopsByName,
+  }
+}
 function calcOasis(oasis){
   const srv=currentSpeed(), interval=currentInterval()
   const active=oasis.troops.filter(t=>t.name&&t.qty>0)
@@ -340,7 +389,7 @@ function recalcGlobal(){
 
   if(!oasisList.length){ grEl.style.display="none"; return }
 
-  const {troopsByName, cyclesStable} = simulate()
+  const {troopsByName, cyclesStable} = simulateSyncPool()
   const entries=Object.entries(troopsByName).filter(([,v])=>v>0)
   if(!entries.length){ grEl.style.display="none"; return }
 

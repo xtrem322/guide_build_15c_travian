@@ -396,12 +396,47 @@ def test_npc(driver, base_url):
 def test_oasis(driver, base_url):
     driver.get(f"{base_url}/oasis/")
     wait_for(driver, "#btnProcess")
+    add_button = driver.find_element(By.CSS_SELECTOR, "#importTroops .btn-add-troop-import")
+    add_button.click()
+    add_button = driver.find_element(By.CSS_SELECTOR, "#importTroops .btn-add-troop-import")
+    add_button.click()
+
+    troop_rows = driver.find_elements(By.CSS_SELECTOR, "#importTroops .import-troop-row")
+    assert len(troop_rows) == 3, "Oasis no preparo las tres filas de tropas"
+
+    troop_setup = [
+        ("Jinete estepario", "1"),
+        ("Jinete certero", "1"),
+        ("Merodeador", "1"),
+    ]
+    for row, (troop_name, qty) in zip(troop_rows, troop_setup):
+        Select(row.find_element(By.TAG_NAME, "select")).select_by_visible_text(troop_name)
+        qty_input = row.find_element(By.CSS_SELECTOR, "input[type='number']")
+        qty_input.clear()
+        qty_input.send_keys(qty)
+
     textarea = driver.find_element(By.ID, "taImport")
-    textarea.send_keys("Oasis desocupado 12.4\n1\n24.2.2026\nOasis desocupado 07.8\n1\n24.2.2026")
+    textarea.send_keys("Oasis desocupado 3\n1\n24.2.2026\nOasis desocupado 5.1\n1\n24.2.2026")
     driver.find_element(By.ID, "btnProcess").click()
     rows = driver.find_elements(By.CSS_SELECTOR, "#oasisTableBody .oasis-row")
     assert len(rows) == 2, "Oasis no proceso las filas esperadas"
     assert driver.find_element(By.ID, "globalResult").is_displayed(), "Oasis no mostro resultado global"
+    assert driver.find_element(By.ID, "slow-1").text == "Merodeador", "Oasis no detecto la tropa limitante"
+    assert driver.find_element(By.ID, "ida-1").text == "04:17", "Oasis no calculo bien la ida de la tropa limitante"
+    assert driver.find_element(By.ID, "iv-1").text == "08:34", "Oasis no calculo bien la ida y vuelta"
+    assert driver.find_element(By.ID, "grp-1").text == "3", "Oasis no calculo bien los grupos por fila"
+
+    chips = driver.find_elements(By.CSS_SELECTOR, "#globalTroopList .gr-troop-chip")
+    chip_values = {
+        chip.find_element(By.CLASS_NAME, "gr-troop-name").text:
+        chip.find_element(By.CLASS_NAME, "gr-troop-qty").text
+        for chip in chips
+    }
+    assert chip_values == {
+        "Merodeador": "7",
+        "Jinete estepario": "6",
+        "Jinete certero": "6",
+    }, "Oasis no calculo bien el pool sincronizado por tipo de tropa"
 
 
 def test_vacas(driver, base_url):
