@@ -437,6 +437,10 @@ def test_oasis(driver, base_url):
         "Jinete estepario": "7",
         "Jinete certero": "7",
     }, "Oasis no calculo bien el pool sincronizado por combo de oasis"
+    assert driver.find_element(By.ID, "simulationDetail").is_displayed(), "Oasis no mostro el detalle de la simulacion"
+    sim_rows = driver.find_elements(By.CSS_SELECTOR, "#simulationRows .sim-row")
+    assert len(sim_rows) >= 3, "Oasis no renderizo suficientes ciclos de simulacion"
+    assert "Estable" in sim_rows[-1].text, "Oasis no marco el ciclo estable en el detalle"
 
 
 def test_vacas(driver, base_url):

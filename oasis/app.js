@@ -230,6 +230,7 @@ function simulateSyncPool(){
     troopsNeeded: Object.values(troopsByName).reduce((sum, qty)=>sum+qty, 0),
     cyclesStable,
     troopsByName,
+    simulationSteps: sim.steps || [],
   }
 }
 function runGroupSimulation(jobs, poolByTroop, interval){
@@ -238,21 +239,51 @@ function runGroupSimulation(jobs, poolByTroop, interval){
   const troopNames = Object.keys(poolByTroop).sort()
   const available = {}
   troopNames.forEach(name=>{ available[name] = poolByTroop[name] || 0 })
+  const fixedSendCounts = {}
+  const steps = []
+
+  for(const job of jobs){
+    for(const [name, qty] of Object.entries(job.counts)){
+      fixedSendCounts[name] = (fixedSendCounts[name] || 0) + qty
+    }
+  }
 
   let returns = []
 
+  function cloneCounts(source){
+    const clone = {}
+    for(const name of troopNames) clone[name] = source[name] || 0
+    return clone
+  }
+
+  function collectTransitCounts(){
+    const transit = {}
+    for(const name of troopNames) transit[name] = 0
+    for(const ret of returns){
+      for(const [name, qty] of Object.entries(ret.counts)){
+        transit[name] = (transit[name] || 0) + qty
+      }
+    }
+    return transit
+  }
+
   function releaseUpTo(t){
     const keep = []
+    const returnedCounts = {}
+    const returnedOasis = []
     for(const ret of returns){
       if(ret.returnAt <= t + EPS){
         for(const [name, qty] of Object.entries(ret.counts)){
           available[name] = (available[name] || 0) + qty
+          returnedCounts[name] = (returnedCounts[name] || 0) + qty
         }
+        returnedOasis.push(ret.oasisId)
       } else {
         keep.push(ret)
       }
     }
     returns = keep
+    return {returnedCounts, returnedOasis}
   }
 
   function stateKey(t){
@@ -287,28 +318,66 @@ function runGroupSimulation(jobs, poolByTroop, interval){
 
   for(let cycle=1; cycle<=MAX_CYCLES; cycle++){
     const t = cycle * interval
-    releaseUpTo(t)
+    const released = releaseUpTo(t)
+    const availableBefore = cloneCounts(available)
 
     const preKey = stateKey(t)
     if(prevPreKey !== null && preKey === prevPreKey){
-      return { ok:true, cycles: cycle }
+      steps.push({
+        cycle,
+        minute: t,
+        returnedCounts: released.returnedCounts,
+        returnedOasis: released.returnedOasis.slice().sort((a,b)=>a-b),
+        availableBefore,
+        sentCounts: cloneCounts(fixedSendCounts),
+        availableAfter: cloneCounts(available),
+        inTransitAfter: collectTransitCounts(),
+        status: "stable",
+        note: "El estado previo al envio se repite; desde aqui el patron queda estable.",
+      })
+      return { ok:true, cycles: cycle, steps }
     }
     prevPreKey = preKey
 
     for(const job of jobs){
       for(const [name, qty] of Object.entries(job.counts)){
         if((available[name] || 0) < qty){
-          return { ok:false, cycles: cycle }
+          steps.push({
+            cycle,
+            minute: t,
+            returnedCounts: released.returnedCounts,
+            returnedOasis: released.returnedOasis.slice().sort((a,b)=>a-b),
+            availableBefore,
+            sentCounts: cloneCounts(fixedSendCounts),
+            availableAfter: cloneCounts(available),
+            inTransitAfter: collectTransitCounts(),
+            status: "fail",
+            note: `Falta ${job.troopName || name} para sostener el envio sincronizado.`,
+          })
+          return { ok:false, cycles: cycle, steps }
         }
       }
       for(const [name, qty] of Object.entries(job.counts)){
         available[name] -= qty
       }
-      returns.push({ returnAt: t + job.tIV, counts: job.counts })
+      returns.push({ returnAt: t + job.tIV, counts: job.counts, oasisId: job.oasisId })
     }
+
+    steps.push({
+      cycle,
+      minute: t,
+      returnedCounts: released.returnedCounts,
+      returnedOasis: released.returnedOasis.slice().sort((a,b)=>a-b),
+      availableBefore,
+      sentCounts: cloneCounts(fixedSendCounts),
+      availableAfter: cloneCounts(available),
+      inTransitAfter: collectTransitCounts(),
+      status: "progress",
+      note: "Ciclo ejecutado; el pool sigue acumulando retornos hacia el estado estable.",
+    })
   }
 
-  return { ok:true, cycles: MAX_CYCLES }
+  return { ok:true, cycles: MAX_CYCLES, steps }
 }
 
 function simulateSyncGroupPool(){
@@ -347,7 +416,60 @@ function simulateSyncGroupPool(){
     troopsNeeded: Object.values(troopsByName).reduce((sum, qty)=>sum+qty, 0),
     cyclesStable,
     troopsByName,
+    simulationSteps: sim.steps || [],
   }
+}
+
+function formatCountMap(counts){
+  const entries = Object.entries(counts||{}).filter(([,qty])=>qty>0)
+  if(!entries.length) return '<span class="sim-muted">Sin movimiento</span>'
+  return entries
+    .sort((a,b)=>a[0].localeCompare(b[0]))
+    .map(([name, qty])=>`<div class="sim-block-line"><strong>${name}</strong>: ${qty}</div>`)
+    .join("")
+}
+
+function formatReturnedBlock(step){
+  const lines = []
+  if(step.returnedOasis && step.returnedOasis.length){
+    lines.push(`<div class="sim-block-line"><strong>Oasis</strong>: ${step.returnedOasis.map(id=>`#${id}`).join(", ")}</div>`)
+  }
+  const countsHtml = formatCountMap(step.returnedCounts)
+  lines.push(countsHtml.includes("sim-muted") ? countsHtml : `<div class="sim-block">${countsHtml}</div>`)
+  return lines.join("")
+}
+
+function renderSimulationDetails(steps){
+  const wrap = $("simulationDetail")
+  const body = $("simulationRows")
+  body.innerHTML = ""
+
+  if(!steps || !steps.length){
+    wrap.style.display = "none"
+    return
+  }
+
+  wrap.style.display = "block"
+
+  steps.forEach(step=>{
+    const row = document.createElement("div")
+    row.className = "sim-row"
+
+    const stateClass = step.status === "stable" ? "stable" : step.status === "fail" ? "fail" : "progress"
+    const stateLabel = step.status === "stable" ? "Estable" : step.status === "fail" ? "No alcanza" : "En progreso"
+    row.innerHTML = [
+      `<div class="sim-cell"><span class="sim-cycle">${step.cycle}</span></div>`,
+      `<div class="sim-cell"><span class="sim-minute">${fmtTime(step.minute)}</span></div>`,
+      `<div class="sim-cell left"><div class="sim-block">${formatReturnedBlock(step)}</div></div>`,
+      `<div class="sim-cell left"><div class="sim-block">${formatCountMap(step.availableBefore)}</div></div>`,
+      `<div class="sim-cell left"><div class="sim-block">${formatCountMap(step.sentCounts)}</div></div>`,
+      `<div class="sim-cell left"><div class="sim-block">${formatCountMap(step.availableAfter)}</div></div>`,
+      `<div class="sim-cell left"><div class="sim-block">${formatCountMap(step.inTransitAfter)}</div></div>`,
+      `<div class="sim-cell"><div class="sim-block"><span class="sim-state ${stateClass}">${stateLabel}</span><span class="sim-block-line sim-muted">${step.note}</span></div></div>`,
+    ].join("")
+
+    body.appendChild(row)
+  })
 }
 
 function calcOasis(oasis){
@@ -505,11 +627,11 @@ function recalcGlobal(){
   const grEl=$("globalResult"), list=$("globalTroopList")
   list.innerHTML=""
 
-  if(!oasisList.length){ grEl.style.display="none"; return }
+  if(!oasisList.length){ grEl.style.display="none"; renderSimulationDetails([]); return }
 
-  const {troopsByName, cyclesStable} = simulateSyncGroupPool()
+  const {troopsByName, cyclesStable, simulationSteps} = simulateSyncGroupPool()
   const entries=Object.entries(troopsByName).filter(([,v])=>v>0)
-  if(!entries.length){ grEl.style.display="none"; return }
+  if(!entries.length){ grEl.style.display="none"; renderSimulationDetails([]); return }
 
   grEl.style.display="block"
 
@@ -524,13 +646,18 @@ function recalcGlobal(){
   const cycleInfo=document.createElement("div"); cycleInfo.className="gr-cycles"
   cycleInfo.innerHTML=`<span class="gr-cycle-label">Estado estable en ciclo</span><span class="gr-cycle-num">${cyclesStable}</span><span class="gr-cycle-label">· cada ${currentInterval()} min</span>`
   list.appendChild(cycleInfo)
+  renderSimulationDetails(simulationSteps)
 }
 
 function checkEmpty(){
   const empty=oasisList.length===0
   $("emptyState").style.display=empty?"block":"none"
   $("oasisTableWrap").style.display=empty?"none":"block"
-  if(empty) $("globalResult").style.display="none"
+  if(empty){
+    $("globalResult").style.display="none"
+    $("simulationDetail").style.display="none"
+    $("simulationRows").innerHTML=""
+  }
 }
 
 /* ══ INIT ══ */
