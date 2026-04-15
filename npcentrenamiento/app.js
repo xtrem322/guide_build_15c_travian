@@ -2087,6 +2087,72 @@ function getSortedVillagePlansForLinks(plan){
     })
 }
 
+function getVillagePlansInConfiguredOrder(plan){
+  return (Array.isArray(plan?.villagePlans) ? plan.villagePlans : [])
+    .slice()
+    .sort((a, b) => compareVillageOrder(a?.village, b?.village))
+}
+
+function formatTrainingCountsForCopy(counts, factor){
+  const active = (Array.isArray(counts) ? counts : []).filter(item => n0(item?.units) > 0)
+  if(!active.length) return []
+  const formatItem = (item, units) => {
+    const troopName = String(item?.troopName || "").trim()
+    const label = String(item?.label || "").trim() || "?"
+    return troopName ? `${label}: ${troopName} ${fmtInt(units)}` : `${label}: ${fmtInt(units)}`
+  }
+  const lines = active.map(item => formatItem(item, item.units))
+  if(factor > 1){
+    lines.push(`x${factor} por aldea:`)
+    for(const item of active) lines.push(formatItem(item, splitAmount(item.units, factor)))
+  }
+  return lines
+}
+
+function buildTrainingDistributionCopyText(plan){
+  const orderedPlans = getVillagePlansInConfiguredOrder(plan)
+    .filter(item => (Array.isArray(item?.counts) ? item.counts : []).some(count => n0(count?.units) > 0))
+
+  if(!orderedPlans.length) return ""
+
+  const lines = ["[b]Distribucion de tropas[/b]"]
+  for(const item of orderedPlans){
+    const villageName = String(item?.village?.name || "").trim() || "Aldea sin nombre"
+    const splitFactor = getSplitFactorForVillage(item?.village?.key || "")
+    lines.push("")
+    lines.push(`[b]${villageName}[/b]`)
+    lines.push(...formatTrainingCountsForCopy(item.counts, splitFactor))
+  }
+  return lines.join("\n").trim()
+}
+
+async function copyTextToClipboard(text){
+  const value = String(text || "")
+  if(!value.trim()) throw new Error("No hay texto para copiar.")
+
+  if(navigator?.clipboard?.writeText){
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const area = document.createElement("textarea")
+  area.value = value
+  area.setAttribute("readonly", "readonly")
+  area.style.position = "fixed"
+  area.style.top = "-9999px"
+  area.style.left = "-9999px"
+  document.body.appendChild(area)
+  area.focus()
+  area.select()
+
+  try {
+    const ok = document.execCommand("copy")
+    if(!ok) throw new Error("No se pudo copiar el resumen.")
+  } finally {
+    document.body.removeChild(area)
+  }
+}
+
 function formatDateAsServerHm(date){
   const serverDate = getServerTimeFromLocal(date)
   return {
@@ -2449,6 +2515,7 @@ function renderTrainingResult(plan){
         <input type="checkbox" id="useDestinationCapacityCap" ${plan.usesDestinationCapacityCap ? "checked" : ""}>
         <span>Usar tope almacen Aldea destino?</span>
       </label>
+      <button type="button" class="btn" id="btnCopyTrainingDistribution">Copiar Distribucion de tropas</button>
     </div>
     <table class="training-transfer-table">
       <thead>
@@ -2604,6 +2671,21 @@ function renderTrainingResult(plan){
   if(openAllButton){
     openAllButton.addEventListener("click", () => {
       openAllTrainingLinks()
+    })
+  }
+  const copyDistributionButton = body.querySelector("#btnCopyTrainingDistribution")
+  if(copyDistributionButton){
+    copyDistributionButton.addEventListener("click", async () => {
+      copyDistributionButton.disabled = true
+      try {
+        const text = buildTrainingDistributionCopyText(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+        await copyTextToClipboard(text)
+        showStatus("Resumen de distribucion copiado al portapapeles.", "ok")
+      } catch (error){
+        showStatus(String(error?.message || "No se pudo copiar el resumen."), "bad")
+      } finally {
+        copyDistributionButton.disabled = false
+      }
     })
   }
   const destinationCapCheckbox = body.querySelector("#useDestinationCapacityCap")

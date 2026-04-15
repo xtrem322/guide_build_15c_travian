@@ -1305,6 +1305,81 @@ def test_npc_training_split_buttons(driver, base_url):
     assert len(active_after_3) == 1 and len(inactive_2) == 0, "Entre 3 no reemplazo correctamente al boton activo"
 
 
+def test_npc_training_copy_distribution_uses_configured_village_order(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.__copiedTrainingText = "";
+        const originalClipboard = navigator.clipboard;
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (text) => {
+              window.__copiedTrainingText = text;
+            }
+          }
+        });
+
+        trainingSplitModeByVillage = { "village-b": 2 };
+        trainingLastGeneratedLinks = [];
+
+        const villageA = { key: "village-a", name: "Villa A", sourceOrder: 2 };
+        const villageB = { key: "village-b", name: "Villa B", sourceOrder: 1 };
+
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 2,
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              currentTime: 0,
+              counts: [{ label:"E", troopName:"Equites", units:40 }],
+              deficit: withResourceTotal({ wood: 100, clay: 100, iron: 100, crop: 100 })
+            },
+            {
+              village: villageB,
+              status: "NPC",
+              currentTime: 0,
+              counts: [{ label:"C", troopName:"Imperiano", units:30 }],
+              deficit: withResourceTotal({ wood: 90, clay: 90, iron: 90, crop: 90 })
+            }
+          ]
+        });
+
+        document.getElementById("btnCopyTrainingDistribution").click();
+
+        setTimeout(() => {
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: originalClipboard
+          });
+          done({
+            copied: window.__copiedTrainingText,
+            status: document.getElementById("statusLine").textContent.trim(),
+            actionTexts: [...document.querySelectorAll('.training-result-actions .btn, .training-result-actions label span')].map(el => el.textContent.trim())
+          });
+        }, 50);
+        """
+    )
+
+    assert "Copiar Distribucion de tropas" in result["actionTexts"], "Falto el boton para copiar la distribucion desde las acciones del plan"
+    assert result["copied"].startswith("[b]Distribucion de tropas[/b]"), "El resumen copiado debia arrancar con un titulo en negrita"
+    assert result["copied"].index("[b]Villa B[/b]") < result["copied"].index("[b]Villa A[/b]"), "El resumen copiado no respeto el orden configurado de aldeas"
+    assert "C: Imperiano 30" in result["copied"], "El resumen copiado no incluyo las tropas de la primera aldea configurada"
+    assert "x2 por aldea:" in result["copied"] and "C: Imperiano 15" in result["copied"], "El resumen copiado no reflejo el reparto Entre 2"
+    assert "E: Equites 40" in result["copied"], "El resumen copiado no incluyo las tropas de la segunda aldea"
+    assert "copiado al portapapeles" in result["status"], "La interfaz no confirmo que el resumen se copio"
+
+
 def test_npc_training_global_modifiers(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -3250,6 +3325,7 @@ def main():
                 ("npc_training_equalize_times_matches_training_names_without_colon", test_npc_training_equalize_times_matches_training_names_without_colon),
                 ("npc_training_equalize_times_ignores_unconfigured_buildings", test_npc_training_equalize_times_ignores_unconfigured_buildings),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
+                ("npc_training_copy_distribution_uses_configured_village_order", test_npc_training_copy_distribution_uses_configured_village_order),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),
