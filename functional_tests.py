@@ -1380,6 +1380,85 @@ def test_npc_training_copy_distribution_uses_configured_village_order(driver, ba
     assert "copiado al portapapeles" in result["status"], "La interfaz no confirmo que el resumen se copio"
 
 
+def test_npc_training_copy_distribution_table_uses_columns_and_village_order(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.__copiedTrainingTableText = "";
+        const originalClipboard = navigator.clipboard;
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: async (text) => {
+              window.__copiedTrainingTableText = text;
+            }
+          }
+        });
+
+        trainingSplitModeByVillage = { "village-b": 2 };
+        trainingLastGeneratedLinks = [];
+
+        const villageA = { key: "village-a", name: "Villa A", sourceOrder: 2 };
+        const villageB = { key: "village-b", name: "Villa B", sourceOrder: 1 };
+
+        renderTrainingResult({
+          feasible: true,
+          targetSec: 120,
+          totalTransfer: withResourceTotal({ wood: 0, clay: 0, iron: 0, crop: 0 }),
+          villageTransfers: [],
+          central: { name: "Central" },
+          centralAvailable: withResourceTotal({ wood: 500000, clay: 500000, iron: 500000, crop: 500000 }),
+          activeQueues: 3,
+          villagePlans: [
+            {
+              village: villageA,
+              status: "NPC",
+              currentTime: 0,
+              counts: [
+                { label:"E", troopName:"Equites", units:40 },
+                { label:"T", troopName:"Ariete", units:12 }
+              ],
+              deficit: withResourceTotal({ wood: 100, clay: 100, iron: 100, crop: 100 })
+            },
+            {
+              village: villageB,
+              status: "NPC",
+              currentTime: 0,
+              counts: [{ label:"C", troopName:"Imperiano", units:30 }],
+              deficit: withResourceTotal({ wood: 90, clay: 90, iron: 90, crop: 90 })
+            }
+          ]
+        });
+
+        document.getElementById("btnCopyTrainingDistributionTable").click();
+
+        setTimeout(() => {
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: originalClipboard
+          });
+          done({
+            copied: window.__copiedTrainingTableText,
+            status: document.getElementById("statusLine").textContent.trim(),
+            actionTexts: [...document.querySelectorAll('.training-result-actions .btn, .training-result-actions label span')].map(el => el.textContent.trim())
+          });
+        }, 50);
+        """
+    )
+
+    lines = result["copied"].splitlines()
+    assert "Copiar Distribucion de tropas" in result["actionTexts"], "El boton original de copiar distribucion no debia desaparecer"
+    assert "COPIAR DISTRIBUCION FORMATO TABLA" in result["actionTexts"], "Falto el boton nuevo para copiar en formato tabla"
+    assert lines[0] == "[b]Distribucion de tropas - formato tabla[/b]", "El resumen tabulado debia arrancar con el titulo correcto"
+    assert lines[1] == "[b]ALDEA[/b] | [b]CUARTEL[/b] | [b]ESTABLO[/b] | [b]TALLER[/b]", "El resumen tabulado no incluyo las columnas esperadas"
+    assert lines[2] == "Villa B | Imperiano: 30 (x2: Imperiano: 15) | - | -", "La primera fila tabulada no respeto el orden configurado ni el contenido de CUARTEL"
+    assert lines[3] == "Villa A | - | Equites: 40 | Ariete: 12", "La segunda fila tabulada no distribuyo bien ESTABLO y TALLER"
+    assert "tabulado" in result["status"].lower() and "copiado al portapapeles" in result["status"].lower(), "La interfaz no confirmo que el resumen tabulado se copio"
+
+
 def test_npc_training_global_modifiers(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
@@ -3326,6 +3405,7 @@ def main():
                 ("npc_training_equalize_times_ignores_unconfigured_buildings", test_npc_training_equalize_times_ignores_unconfigured_buildings),
                 ("npc_training_split_buttons", test_npc_training_split_buttons),
                 ("npc_training_copy_distribution_uses_configured_village_order", test_npc_training_copy_distribution_uses_configured_village_order),
+                ("npc_training_copy_distribution_table_uses_columns_and_village_order", test_npc_training_copy_distribution_table_uses_columns_and_village_order),
                 ("npc_training_global_modifiers", test_npc_training_global_modifiers),
                 ("npc_training_queue_names", test_npc_training_queue_names),
                 ("npc_training_resource_icons", test_npc_training_resource_icons),

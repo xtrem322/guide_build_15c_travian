@@ -2109,6 +2109,24 @@ function formatTrainingCountsForCopy(counts, factor){
   return lines
 }
 
+function formatTrainingCountCell(item, factor){
+  if(!item || n0(item?.units) <= 0) return "-"
+  const troopName = String(item?.troopName || "").trim()
+  const main = troopName ? `${troopName}: ${fmtInt(item.units)}` : fmtInt(item.units)
+  if(factor <= 1) return main
+  const splitUnits = splitAmount(item.units, factor)
+  const split = troopName ? `${troopName}: ${fmtInt(splitUnits)}` : fmtInt(splitUnits)
+  return `${main} (x${factor}: ${split})`
+}
+
+function getTrainingCountCellByLabel(counts, queueLabel, factor){
+  const matches = (Array.isArray(counts) ? counts : [])
+    .filter(item => String(item?.label || "").trim().toUpperCase() === String(queueLabel || "").trim().toUpperCase() && n0(item?.units) > 0)
+
+  if(!matches.length) return "-"
+  return matches.map(item => formatTrainingCountCell(item, factor)).join(" + ")
+}
+
 function buildTrainingDistributionCopyText(plan){
   const orderedPlans = getVillagePlansInConfiguredOrder(plan)
     .filter(item => (Array.isArray(item?.counts) ? item.counts : []).some(count => n0(count?.units) > 0))
@@ -2123,6 +2141,34 @@ function buildTrainingDistributionCopyText(plan){
     lines.push(`[b]${villageName}[/b]`)
     lines.push(...formatTrainingCountsForCopy(item.counts, splitFactor))
   }
+  return lines.join("\n").trim()
+}
+
+function buildTrainingDistributionTableCopyText(plan){
+  const orderedPlans = getVillagePlansInConfiguredOrder(plan)
+    .filter(item => (Array.isArray(item?.counts) ? item.counts : []).some(count => {
+      const label = String(count?.label || "").trim().toUpperCase()
+      return (label === "C" || label === "E" || label === "T") && n0(count?.units) > 0
+    }))
+
+  if(!orderedPlans.length) return ""
+
+  const lines = [
+    "[b]Distribucion de tropas - formato tabla[/b]",
+    "[b]ALDEA[/b] | [b]CUARTEL[/b] | [b]ESTABLO[/b] | [b]TALLER[/b]"
+  ]
+
+  for(const item of orderedPlans){
+    const villageName = String(item?.village?.name || "").trim() || "Aldea sin nombre"
+    const splitFactor = getSplitFactorForVillage(item?.village?.key || "")
+    lines.push([
+      villageName,
+      getTrainingCountCellByLabel(item?.counts, "C", splitFactor),
+      getTrainingCountCellByLabel(item?.counts, "E", splitFactor),
+      getTrainingCountCellByLabel(item?.counts, "T", splitFactor)
+    ].join(" | "))
+  }
+
   return lines.join("\n").trim()
 }
 
@@ -2516,6 +2562,7 @@ function renderTrainingResult(plan){
         <span>Usar tope almacen Aldea destino?</span>
       </label>
       <button type="button" class="btn" id="btnCopyTrainingDistribution">Copiar Distribucion de tropas</button>
+      <button type="button" class="btn" id="btnCopyTrainingDistributionTable">COPIAR DISTRIBUCION FORMATO TABLA</button>
     </div>
     <table class="training-transfer-table">
       <thead>
@@ -2685,6 +2732,21 @@ function renderTrainingResult(plan){
         showStatus(String(error?.message || "No se pudo copiar el resumen."), "bad")
       } finally {
         copyDistributionButton.disabled = false
+      }
+    })
+  }
+  const copyDistributionTableButton = body.querySelector("#btnCopyTrainingDistributionTable")
+  if(copyDistributionTableButton){
+    copyDistributionTableButton.addEventListener("click", async () => {
+      copyDistributionTableButton.disabled = true
+      try {
+        const text = buildTrainingDistributionTableCopyText(trainingLastRenderedPlan?.feasible ? trainingLastRenderedPlan : null)
+        await copyTextToClipboard(text)
+        showStatus("Resumen tabulado de distribucion copiado al portapapeles.", "ok")
+      } catch (error){
+        showStatus(String(error?.message || "No se pudo copiar el resumen tabulado."), "bad")
+      } finally {
+        copyDistributionTableButton.disabled = false
       }
     })
   }
