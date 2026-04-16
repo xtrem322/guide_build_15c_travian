@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; frame-ancestors 'none'">
+<title>Planificador de Ataques</title>
+<link rel="stylesheet" href="../npc/styles.css">
+<style>
+  .attack-layout{
+    display:grid;
+    grid-template-columns:minmax(0,1.8fr) minmax(320px,.9fr);
+    gap:18px;
+    align-items:start;
+  }
+  .attack-main,
+  .attack-side{
+    min-width:0;
+  }
+  .attack-side{
+    position:sticky;
+    top:16px;
+  }
+  .attack-form-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin-bottom:14px;
+  }
+  .attack-coords-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(70px,1fr));
+    gap:8px;
+  }
+  .attack-preview-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin:12px 0 16px;
+  }
+  .attack-preview-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:12px 14px;
+  }
+  .attack-preview-label{
+    color:var(--muted);
+    font-size:12px;
+    font-weight:900;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-bottom:6px;
+  }
+  .attack-preview-value{
+    font-weight:800;
+    font-size:16px;
+    word-break:break-word;
+  }
+  .attack-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin:16px 0;
+  }
+  .attack-map-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin-top:10px;
+  }
+  .attack-map-status{
+    font-size:12px;
+    font-weight:800;
+    color:var(--muted);
+  }
+  .attack-map-status.ok{ color:var(--ok); }
+  .attack-map-status.bad{ color:var(--danger); }
+  .attack-textarea{
+    width:100%;
+    min-height:108px;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--panel);
+    color:var(--text);
+    resize:vertical;
+    font:inherit;
+  }
+  .attack-table-wrap{
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+    background:var(--panel);
+  }
+  .attack-table-scroll{
+    overflow:auto;
+  }
+  .attack-table{
+    width:100%;
+    min-width:1400px;
+    border-collapse:collapse;
+  }
+  .attack-table th,
+  .attack-table td{
+    border-bottom:1px solid var(--border);
+    padding:10px 12px;
+    text-align:left;
+    vertical-align:top;
+  }
+  .attack-table th{
+    background:#0f3f77;
+    color:#fff;
+    font-size:12px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+  .attack-table tbody tr:nth-child(even){
+    background:rgba(37,99,235,.05);
+  }
+  .attack-table tbody tr.is-overdue{
+    background:rgba(239,68,68,.12);
+  }
+  .attack-table tbody tr.is-alerting{
+    outline:2px solid var(--orange);
+    outline-offset:-2px;
+  }
+  .attack-name{
+    font-weight:800;
+    margin-bottom:4px;
+  }
+  .attack-sub{
+    color:var(--muted);
+    font-size:12px;
+  }
+  .attack-pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:999px;
+    padding:6px 10px;
+    font-size:12px;
+    font-weight:900;
+    background:#dbeafe;
+    color:#1d4ed8;
+    white-space:nowrap;
+  }
+  .attack-pill.bad{
+    background:#fee2e2;
+    color:#b91c1c;
+  }
+  .attack-pill.warn{
+    background:#ffedd5;
+    color:#c2410c;
+  }
+  .attack-link-actions,
+  .attack-row-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .btn.btn-small{
+    padding:8px 10px;
+    font-size:12px;
+    border-radius:8px;
+  }
+  .attack-summary-list{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    min-width:220px;
+  }
+  .attack-empty{
+    padding:18px;
+    color:var(--muted);
+    font-weight:700;
+  }
+  .attack-editor-card{
+    border:1px solid var(--border);
+    border-radius:14px;
+    background:var(--panel);
+    padding:14px;
+    box-shadow:0 14px 32px rgba(15,23,42,.08);
+  }
+  .attack-editor-title{
+    margin:0 0 6px;
+    font-size:20px;
+    font-weight:900;
+  }
+  .attack-editor-subtitle{
+    color:var(--muted);
+    margin-bottom:12px;
+    font-size:13px;
+    font-weight:700;
+  }
+  .attack-editor-list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .attack-editor-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 110px 42px;
+    gap:8px;
+    align-items:end;
+  }
+  .attack-editor-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:14px;
+  }
+  .attack-editor-empty{
+    color:var(--muted);
+    font-weight:700;
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:12px;
+  }
+  .attack-inline-help{
+    color:var(--muted);
+    font-size:12px;
+    font-weight:700;
+    margin-top:4px;
+  }
+  .attack-toolbar-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:flex-end;
+  }
+  @media (max-width: 1180px){
+    .attack-layout{
+      grid-template-columns:1fr;
+    }
+    .attack-side{
+      position:static;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sticky-top">
+    <div id="nav"></div>
+    <script src="../nav.js" defer></script>
+
+    <h1 class="page-title">Planificador de Ataques</h1>
+    <div class="subtitle">Calcula viajes, envio, recordatorios y links de ataque desde varias aldeas</div>
+
+    <div class="toolbar">
+      <div class="tool">
+        <div class="tool-label">Velocidad servidor</div>
+        <select id="serverSpeed">
+          <option value="1">x1</option>
+          <option value="2">x2</option>
+          <option value="3" selected>x3</option>
+          <option value="5">x5</option>
+          <option value="10">x10</option>
+        </select>
+      </div>
+      <div class="tool tool-wide">
+        <div class="tool-label">Servidor Travian</div>
+        <input id="attackServerHost" type="text" value="eternos.x3.hispano.travian.com" placeholder="eternos.x3.hispano.travian.com">
+      </div>
+      <div class="tool">
+        <div class="tool-label">Segundos aviso</div>
+        <input id="attackReminderSeconds" type="number" min="1" step="1" value="60">
+      </div>
+      <div class="attack-toolbar-actions">
+        <button class="btn" id="btnAttackNotifications" type="button">Activar notificaciones</button>
+      </div>
+    </div>
+
+    <div class="statusline" id="statusLine">Configura el borrador de ataque y pulsa Anadir.</div>
+
+    <div class="mode-panel">
+      <div class="mode-title">Nuevo ataque</div>
+      <div class="attack-layout">
+        <div class="attack-main">
+          <div class="attack-form-grid">
+            <div class="tool">
+              <div class="tool-label">Raza atacante</div>
+              <select id="attackRace"></select>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Plaza de torneos</div>
+              <select id="attackTournamentLevel"></select>
+              <div class="attack-inline-help">Aplica bono solo mas alla de 20 casillas.</div>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Aldea origen</div>
+              <div class="attack-coords-grid">
+                <input id="attackOriginX" type="number" step="1" placeholder="X">
+                <input id="attackOriginY" type="number" step="1" placeholder="Y">
+              </div>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Aldea destino</div>
+              <div class="attack-coords-grid">
+                <input id="attackTargetX" type="number" step="1" placeholder="X">
+                <input id="attackTargetY" type="number" step="1" placeholder="Y">
+              </div>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Hora objetivo de llegada</div>
+              <input id="attackArrivalAt" type="datetime-local">
+              <div class="attack-inline-help">Por defecto: viaje calculado + 5 minutos.</div>
+            </div>
+          </div>
+
+          <div class="attack-preview-grid" id="attackDraftPreview"></div>
+
+          <div class="tool">
+            <div class="tool-label">map.sql manual (opcional)</div>
+            <textarea id="attackMapSqlInput" class="attack-textarea" placeholder="Si el servidor bloquea map.sql, pega aqui el contenido del archivo o cargalo con el boton inferior"></textarea>
+            <div class="attack-map-actions">
+              <label class="btn" for="attackMapSqlFile">Cargar archivo map.sql</label>
+              <input id="attackMapSqlFile" type="file" accept=".sql,text/plain" hidden>
+              <button class="btn" id="btnClearAttackMapSql" type="button">Limpiar map.sql</button>
+              <div class="attack-map-status" id="attackMapSqlStatus">Se intentara usar el map.sql del proyecto por defecto.</div>
+            </div>
+          </div>
+
+          <div class="attack-actions">
+            <button class="btn btn-orange" id="btnAddAttackRow" type="button">Anadir</button>
+            <button class="btn" id="btnUseSuggestedArrival" type="button">Usar llegada sugerida</button>
+            <button class="btn" id="btnEditDraftTroops" type="button">Editar tropas del borrador</button>
+          </div>
+
+          <div class="attack-table-wrap">
+            <div class="attack-table-scroll">
+              <table class="attack-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Origen</th>
+                    <th>Destino</th>
+                    <th>Llegada</th>
+                    <th>Tropa lenta</th>
+                    <th>Dist.</th>
+                    <th>Viaje</th>
+                    <th>Enviar</th>
+                    <th>Aviso</th>
+                    <th>Tropas</th>
+                    <th>Link</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="attackRowsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <aside class="attack-side">
+          <div class="attack-editor-card">
+            <h2 class="attack-editor-title">Editor de tropas</h2>
+            <div class="attack-editor-subtitle" id="attackEditorSubtitle">Borrador actual</div>
+            <datalist id="attackTroopOptions"></datalist>
+            <div class="attack-editor-list" id="attackEditorList"></div>
+            <div class="attack-editor-actions">
+              <button class="btn" id="btnAddEditorTroop" type="button">Agregar tropa</button>
+              <button class="btn btn-orange" id="btnSaveEditorTroops" type="button">Guardar tropas</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="mode-panel">
+      <div class="mode-title">Instructivo de uso</div>
+      <div class="training-note">
+        1. Configura un borrador con raza, origen, destino, plaza de torneos y hora de llegada.
+        <br>2. Edita las tropas en el panel derecho y pulsa <strong>Anadir</strong> para crear una fila en la matriz.
+        <br>3. El borrador no se borra al anadir: puedes cambiar coordenadas, hora o tropas y volver a crear otra fila.
+        <br>4. El planificador usa el <strong>map.sql</strong> del proyecto por defecto, pero tambien acepta uno pegado o cargado manualmente.
+        <br>5. El recordatorio dispara sonido y notificacion cuando falten los segundos configurados para la hora de envio.
+        <br>6. El link generado abre <strong>Send troops</strong> con coordenadas, tropas y <strong>eventType=3</strong> para ataque normal.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./app.js" defer></script>
+</body>
+</html>

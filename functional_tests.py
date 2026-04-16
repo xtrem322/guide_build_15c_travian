@@ -341,14 +341,14 @@ def assert_theme_toggle(driver):
 
 
 def test_theme_toggle(driver, base_url):
-    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/npcgrandesfiestas/", "/oasis/", "/listadevacas/", "/cultura/"]
+    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/planificadorataques/", "/npcgrandesfiestas/", "/oasis/", "/listadevacas/", "/cultura/"]
     for path in paths:
         driver.get(f"{base_url}{path}")
         assert_theme_toggle(driver)
 
 
 def test_default_server_speed_x3(driver, base_url):
-    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/oasis/", "/listadevacas/"]
+    paths = ["/roi/", "/npc/", "/npcentrenamiento/", "/planificadorataques/", "/oasis/", "/listadevacas/"]
     for path in paths:
         driver.get(f"{base_url}{path}")
         wait_for(driver, "#serverSpeed")
@@ -2908,6 +2908,179 @@ def test_npc_training_mobile_horizontal_scroll(driver, base_url):
     assert result_scroll["overflowX"] in ("auto", "scroll"), "La tabla de resultados no dejo habilitado el overflow horizontal en movil"
 
 
+def test_attack_planner_defaults(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    speed = Select(driver.find_element(By.ID, "serverSpeed")).first_selected_option.get_attribute("value")
+    reminder_seconds = driver.find_element(By.ID, "attackReminderSeconds").get_attribute("value")
+    subtitle = driver.find_element(By.ID, "attackEditorSubtitle").text
+    empty_text = driver.find_element(By.ID, "attackRowsBody").text
+
+    assert speed == "3", "Planificador de Ataques no inicio con velocidad x3"
+    assert reminder_seconds == "60", "Planificador de Ataques no inicio con recordatorio de 60 segundos"
+    assert "Borrador actual" in subtitle, "El panel lateral no abrio el borrador por defecto"
+    assert "Todavia no hay ataques" in empty_text, "La matriz inicial no mostro el estado vacio esperado"
+
+
+def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    map_sql = (
+        "INSERT INTO `x_world` VALUES "
+        "(1,0,0,1,1001,'Origen Uno',1,'Jugador',0,'',0,NULL,FALSE,NULL,NULL,NULL),"
+        "(2,40,0,1,1002,'Destino Dos',1,'Jugador',0,'',0,NULL,FALSE,NULL,NULL,NULL);"
+    )
+
+    result = driver.execute_async_script(
+        """
+        const mapSql = arguments[0];
+        const done = arguments[arguments.length - 1];
+
+        document.getElementById("attackMapSqlInput").value = mapSql;
+        document.getElementById("attackMapSqlInput").dispatchEvent(new Event("input", { bubbles: true }));
+        document.getElementById("attackRace").value = "HUNOS";
+        document.getElementById("attackRace").dispatchEvent(new Event("change", { bubbles: true }));
+        document.getElementById("attackOriginX").value = "0";
+        document.getElementById("attackOriginY").value = "0";
+        document.getElementById("attackTargetX").value = "40";
+        document.getElementById("attackTargetY").value = "0";
+        document.getElementById("attackTournamentLevel").value = "10";
+
+        attackDraft.troops = [
+          { uid: "t1", name: "Mercenario", quantity: 100 },
+          { uid: "t2", name: "Ariete", quantity: 2 }
+        ];
+        openAttackEditor("draft", null);
+        applySuggestedArrivalToDraft();
+        addDraftAttack();
+
+        setTimeout(() => {
+          const row = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
+          done({
+            rowCount: document.querySelectorAll('#attackRowsBody tr[data-attack-id]').length,
+            rowText: row ? row.textContent : "",
+            travel: row ? row.querySelector('td:nth-child(7)')?.textContent.trim() : "",
+            link: row ? row.querySelector('a')?.href || "" : "",
+            status: document.getElementById("statusLine").textContent.trim()
+          });
+        }, 50);
+        """,
+        map_sql
+    )
+
+    assert result["rowCount"] == 1, "El planificador no agrego la fila del ataque"
+    assert "Origen Uno" in result["rowText"] and "Destino Dos" in result["rowText"], "La fila no resolvio nombres con map.sql manual"
+    assert result["travel"] == "03:20:00", "El viaje no aplico correctamente la plaza de torneos mas alla de 20 casillas"
+    assert "eventType=3" in result["link"], "El link de ataque no fijo eventType=3"
+    assert "troop%5Bt1%5D=100" in result["link"] and "troop%5Bt7%5D=2" in result["link"], "El link de ataque no incluyo las tropas correctas"
+    assert "agregada al planificador" in result["status"], "La interfaz no confirmo el alta de la fila"
+
+
+def test_attack_planner_processes_reminders(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const fmtLocalWithSeconds = (date) => {
+          const pad = (value) => String(value).padStart(2, "0");
+          return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        };
+        window.clearInterval(attackReminderLoopId);
+        window.__beeped = false;
+        window.__notif = null;
+        playAttackReminderSound = () => { window.__beeped = true; };
+        window.Notification = function(title, options){
+          window.__notif = { title, options };
+        };
+        window.Notification.permission = "granted";
+
+        document.getElementById("attackReminderSeconds").value = "60";
+        attackRows = [{
+          id: 1,
+          race: "HUNOS",
+          originX: "0",
+          originY: "0",
+          targetX: "0",
+          targetY: "0",
+          tournamentLevel: 0,
+          arrivalAt: fmtLocalWithSeconds(addSeconds(new Date(), 30)),
+          troops: [{ uid: "r1", name: "Mercenario", quantity: 1 }],
+          lastAlertKey: ""
+        }];
+        attackLastVillageLookup = {};
+        renderAttackRows({});
+        processAttackReminders();
+
+        setTimeout(() => {
+          const badge = document.querySelector('#attackRowsBody tr td:nth-child(9)')?.textContent.trim() || "";
+          done({
+            beeped: window.__beeped,
+            notification: window.__notif ? window.__notif.title : "",
+            alertKey: attackRows[0].lastAlertKey || "",
+            badge
+          });
+        }, 20);
+        """
+    )
+
+    assert result["beeped"], "El recordatorio no reprodujo sonido cuando la fila entro en ventana de envio"
+    assert result["notification"] == "Ataque por enviar", "El recordatorio no disparo la notificacion esperada"
+    assert result["alertKey"], "El recordatorio no marco la fila como ya avisada"
+    assert "Avisado" in result["badge"], "La matriz no mostro el estado avisado tras procesar el recordatorio"
+
+
+def test_attack_planner_editor_updates_row_troops(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        attackRows = [{
+          id: 1,
+          race: "HUNOS",
+          originX: "0",
+          originY: "0",
+          targetX: "10",
+          targetY: "0",
+          tournamentLevel: 0,
+          arrivalAt: formatDateTimeLocal(addSeconds(new Date(), 3600)),
+          troops: [{ uid: "r1", name: "Mercenario", quantity: 1 }],
+          lastAlertKey: ""
+        }];
+        renderAttackRows({});
+        openAttackEditor("row", 1);
+
+        const nameInput = document.querySelector(".attack-editor-name");
+        const qtyInput = document.querySelector(".attack-editor-qty");
+        nameInput.value = "Ariete";
+        nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+        qtyInput.value = "3";
+        qtyInput.dispatchEvent(new Event("input", { bubbles: true }));
+        saveAttackEditorTroops();
+
+        setTimeout(() => {
+          const row = attackRows[0];
+          const view = computeAttackRowView(row, {});
+          done({
+            troopName: row && row.troops[0] ? row.troops[0].name : "",
+            troopQty: row && row.troops[0] ? row.troops[0].quantity : 0,
+            link: view.attackLink || "",
+            status: document.getElementById("statusLine").textContent.trim()
+          });
+        }, 20);
+        """
+    )
+
+    assert result["troopName"] == "Ariete" and result["troopQty"] == 3, "Guardar desde el panel lateral no actualizo las tropas de la fila"
+    assert "troop%5Bt7%5D=3" in result["link"], "Guardar desde el panel lateral no actualizo el link con la nueva tropa"
+    assert "Tropas guardadas en la fila 1" in result["status"], "La interfaz no confirmo el guardado desde el panel lateral"
+
+
 def test_npc_party_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
     wait_for(driver, "#btnImportParty")
@@ -3427,6 +3600,10 @@ def main():
                 ("npc_training_sanitizes_link_error_feedback", test_npc_training_sanitizes_link_error_feedback),
                 ("npc_training_delivered_and_delete_controls", test_npc_training_delivered_and_delete_controls),
                 ("npc_training_mobile_horizontal_scroll", test_npc_training_mobile_horizontal_scroll),
+                ("attack_planner_defaults", test_attack_planner_defaults),
+                ("attack_planner_adds_row_and_generates_attack_link", test_attack_planner_adds_row_and_generates_attack_link),
+                ("attack_planner_processes_reminders", test_attack_planner_processes_reminders),
+                ("attack_planner_editor_updates_row_troops", test_attack_planner_editor_updates_row_troops),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),
