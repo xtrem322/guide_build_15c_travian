@@ -2153,21 +2153,30 @@ function buildTrainingDistributionTableCopyText(plan){
 
   if(!orderedPlans.length) return ""
 
-  const lines = [
-    "[b]Distribucion de tropas - formato tabla[/b]",
-    "[b]ALDEA[/b] | [b]CUARTEL[/b] | [b]ESTABLO[/b] | [b]TALLER[/b]"
-  ]
-
-  for(const item of orderedPlans){
+  const rows = orderedPlans.map(item => {
     const villageName = String(item?.village?.name || "").trim() || "Aldea sin nombre"
     const splitFactor = getSplitFactorForVillage(item?.village?.key || "")
-    lines.push([
+    return [
       villageName,
       getTrainingCountCellByLabel(item?.counts, "C", splitFactor),
       getTrainingCountCellByLabel(item?.counts, "E", splitFactor),
       getTrainingCountCellByLabel(item?.counts, "T", splitFactor)
-    ].join(" | "))
-  }
+    ]
+  })
+
+  const headers = ["ALDEA", "CUARTEL", "ESTABLO", "TALLER"]
+  const columnWidths = headers.map((header, idx) => {
+    const maxRowWidth = rows.reduce((max, row) => Math.max(max, String(row[idx] || "").length), 0)
+    return Math.max(header.length, maxRowWidth)
+  })
+  const padCell = (value, idx) => String(value || "").padEnd(columnWidths[idx], " ")
+  const formatRow = (row) => row.map((cell, idx) => padCell(cell, idx)).join("  ").trimEnd()
+
+  const lines = [
+    "[b]Distribucion de tropas - formato tabla[/b]",
+    formatRow(headers)
+  ]
+  for(const row of rows) lines.push(formatRow(row))
 
   return lines.join("\n").trim()
 }
