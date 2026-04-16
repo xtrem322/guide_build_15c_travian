@@ -30,6 +30,7 @@
           <option value="eq">Opcion 1: Equitativo</option>
           <option value="time">Opcion 2: Tropas por tiempo</option>
           <option value="exact">Opcion 3: Tropa exacta</option>
+          <option value="party">Opcion 4: Grandes fiestas</option>
         </select>
       </div>
 
@@ -60,6 +61,8 @@
 
       <button class="btn btn-orange" id="addRow" type="button">+ Anadir fila</button>
     </div>
+
+    <div class="statusline" id="statusLine"></div>
 
     <div id="classicNpcWrap">
       <div class="total-header">
@@ -98,9 +101,6 @@
         <div class="cell-yellow" id="tgtCrop">0</div>
         <div class="cell-total" id="tgtAll">0</div>
       </div>
-
-      <div class="statusline" id="statusLine"></div>
-
       <div class="mode-panel" id="modeTimePanel" style="display:none">
         <div class="mode-title">Opcion 2: Tropas por tiempo (excedente)</div>
 
@@ -192,6 +192,129 @@
       <div class="mode-title">NPC entrenamiento tropas</div>
       <div class="training-note">
         Esta vista se movio a la herramienta independiente del menu superior.
+      </div>
+    </div>
+
+    <div class="mode-panel" id="modePartyPanel" style="display:none">
+      <div class="mode-title">NPC grandes fiestas</div>
+      <div class="training-note">
+        Importa <strong>Capacidad aldea</strong> y <strong>Los Recursos</strong>, elige la <strong>aldea central</strong>, define sus fiestas propias y
+        agrega las aldeas destino con <strong>+ Anadir fila</strong>. El calculo reparte apoyo entre aldeas igual que la herramienta de grandes fiestas y
+        luego puede generar <strong>links de rutas comerciales</strong> como en NPC entrenamiento.
+      </div>
+
+      <div class="training-import-grid">
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Capacidad aldea</div>
+          <textarea id="partyCapacityInput" class="training-textarea" placeholder="Pega aqui el bloque completo que contiene Village / Warehouse / Granary"></textarea>
+        </div>
+        <div class="train-item train-item-wide">
+          <div class="tool-label">Pegado: Los Recursos</div>
+          <textarea id="partyResourcesInput" class="training-textarea" placeholder="Pega aqui el bloque completo que contiene Village / Madera / Barro / Hierro / Cereal / Merchants"></textarea>
+        </div>
+      </div>
+
+      <div class="training-import-grid">
+        <div class="train-item">
+          <div class="tool-label">Servidor Travian</div>
+          <input id="partyServerHost" type="text" value="eternos.x3.hispano.travian.com" placeholder="eternos.x3.hispano.travian.com">
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Min extra links</div>
+          <input id="partyLinkLeadMinutes" type="number" min="0" step="1" value="1">
+        </div>
+      </div>
+
+      <div class="training-import-grid">
+        <div class="train-item train-item-wide">
+          <div class="tool-label">map.sql manual (opcional)</div>
+          <textarea id="partyMapSqlInput" class="training-textarea training-textarea-small" placeholder="Si el servidor bloquea map.sql, pega aqui el contenido del archivo o cargalo con el boton inferior"></textarea>
+          <div class="training-map-actions">
+            <label class="btn training-file-btn" for="partyMapSqlFile">Cargar archivo map.sql</label>
+            <input id="partyMapSqlFile" type="file" accept=".sql,text/plain" hidden>
+            <button class="btn" id="btnClearPartyMapSql" type="button">Limpiar map.sql</button>
+            <div class="training-map-status" id="partyMapSqlStatus">Si el servidor bloquea map.sql, pegalo aqui o carga el archivo para generar los links.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="training-actions">
+        <button class="btn btn-orange" id="btnImportPartyMode" type="button">Importar aldeas</button>
+        <div class="training-import-status" id="partyImportStatus">Sin datos importados.</div>
+      </div>
+
+      <div class="training-central-grid">
+        <div class="train-item">
+          <div class="tool-label">Aldea central</div>
+          <select id="partyCentralVillage"></select>
+        </div>
+        <div class="train-item">
+          <div class="tool-label">Configuracion central</div>
+          <div class="training-central-tools">
+            <div class="tool">
+              <div class="tool-label">Fiestas central</div>
+              <select id="partyCentralCount">
+                <option value="0">0</option>
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+              </select>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Raza central</div>
+              <select id="partyCentralRace"></select>
+            </div>
+            <label class="training-inline-check training-inline-check-boxed">
+              <input type="checkbox" id="partyTradeOfficeEnabled" checked>
+              <span>Oficina de comercio</span>
+            </label>
+            <div class="tool">
+              <div class="tool-label">Nivel mercado</div>
+              <select id="partyMarketplaceLevel"></select>
+            </div>
+            <div class="tool">
+              <div class="tool-label">Nivel oficina</div>
+              <select id="partyTradeOfficeLevel"></select>
+            </div>
+          </div>
+        </div>
+        <div class="training-central-meta" id="partyCentralMeta"></div>
+      </div>
+
+      <div class="training-actions">
+        <div class="tool">
+          <div class="tool-label">Aldea para anadir</div>
+          <select id="partyRowVillageSelect"></select>
+        </div>
+        <button class="btn btn-orange" id="btnAddPartyRow" type="button">+ Anadir fila</button>
+      </div>
+
+      <div class="training-summary" id="partySummary" style="display:none"></div>
+
+      <div class="training-table-wrap" id="partySelectionWrap" style="display:none">
+        <div class="training-table-scroll">
+          <table class="training-table">
+            <thead>
+              <tr>
+                <th class="left">Aldea</th>
+                <th>Fiestas</th>
+                <th>Actual M</th>
+                <th>Actual B</th>
+                <th>Actual H</th>
+                <th>Actual C</th>
+                <th>Actual Total</th>
+                <th>Almacen</th>
+                <th>Granero</th>
+                <th>Quitar</th>
+              </tr>
+            </thead>
+            <tbody id="partySelectionBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="training-result-wrap" id="partyResultWrap" style="display:none">
+        <div class="troop-matrix-title">Plan NPC grandes fiestas</div>
+        <div class="training-result-body" id="partyResultBody"></div>
       </div>
     </div>
   </div>

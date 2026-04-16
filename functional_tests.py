@@ -394,6 +394,155 @@ def test_npc(driver, base_url):
     assert "OK" in status or "NO ALCANZA" in status, "NPC no actualizo estado"
 
 
+def test_npc_party_mode_import_add_row_and_summary(driver, base_url):
+    driver.get(f"{base_url}/npc/")
+    wait_for(driver, "#excessMode")
+
+    Select(driver.find_element(By.ID, "excessMode")).select_by_value("party")
+    wait_for(driver, "#btnImportPartyMode")
+
+    driver.execute_script(
+        "document.getElementById('partyCapacityInput').value = arguments[0];"
+        "document.getElementById('partyResourcesInput').value = arguments[1];",
+        CAPACITY_EXAMPLE,
+        RESOURCES_EXAMPLE
+    )
+    driver.find_element(By.ID, "btnImportPartyMode").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Cruce valido" in d.find_element(By.ID, "partyImportStatus").text
+    )
+
+    add_select = Select(driver.find_element(By.ID, "partyRowVillageSelect"))
+    add_select.select_by_index(0)
+    driver.find_element(By.ID, "btnAddPartyRow").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partySelectionBody tr")) == 1
+    )
+
+    add_select = Select(driver.find_element(By.ID, "partyRowVillageSelect"))
+    add_select.select_by_index(0)
+    driver.find_element(By.ID, "btnAddPartyRow").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partySelectionBody tr")) == 2
+    )
+
+    summary_values = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, "#partySummary .training-summary-value")
+    ]
+    result_rows = driver.find_elements(By.CSS_SELECTOR, "#partyResultBody .training-transfer-table tbody tr")
+
+    assert summary_values == ["9", "9", "2", "3"], "El modo combinado de grandes fiestas no mostro el resumen esperado tras añadir filas"
+    assert len(result_rows) == 2, "El modo combinado de grandes fiestas no renderizo las aldeas seleccionadas en el plan"
+
+
+def test_npc_party_mode_result_delete_removes_row(driver, base_url):
+    driver.get(f"{base_url}/npc/")
+    wait_for(driver, "#excessMode")
+
+    Select(driver.find_element(By.ID, "excessMode")).select_by_value("party")
+    wait_for(driver, "#btnImportPartyMode")
+
+    driver.execute_script(
+        "document.getElementById('partyCapacityInput').value = arguments[0];"
+        "document.getElementById('partyResourcesInput').value = arguments[1];",
+        CAPACITY_EXAMPLE,
+        RESOURCES_EXAMPLE
+    )
+    driver.find_element(By.ID, "btnImportPartyMode").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Cruce valido" in d.find_element(By.ID, "partyImportStatus").text
+    )
+
+    add_select = Select(driver.find_element(By.ID, "partyRowVillageSelect"))
+    add_select.select_by_index(0)
+    driver.find_element(By.ID, "btnAddPartyRow").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partySelectionBody tr")) == 1
+    )
+
+    driver.find_element(By.CSS_SELECTOR, "#partyResultBody .training-row-delete-btn").click()
+    WebDriverWait(driver, 10).until(
+        lambda d: len(d.find_elements(By.CSS_SELECTOR, "#partySelectionBody tr")) == 0
+    )
+
+    status = driver.find_element(By.ID, "statusLine").text
+    assert "Añade al menos una aldea destino" in status, "Quitar la ultima fila del modo combinado no devolvio el estado esperado"
+
+
+def test_npc_party_mode_generates_links_from_manual_map_sql(driver, base_url):
+    driver.get(f"{base_url}/npc/")
+    wait_for(driver, "#excessMode")
+
+    Select(driver.find_element(By.ID, "excessMode")).select_by_value("party")
+    wait_for(driver, "#btnImportPartyMode")
+
+    driver.execute_script(
+        """
+        partyImportedVillages = [
+          {
+            name: "Central",
+            key: "central",
+            sourceOrder: 0,
+            warehouseCap: 400000,
+            granaryCap: 400000,
+            current: withResourceTotal({ wood: 200000, clay: 200000, iron: 200000, crop: 200000 }),
+            hasResources: true,
+            merchantsAvailable: 20,
+            merchantsTotal: 20,
+            x: 83,
+            y: -166,
+            did: 0,
+            isInitialZone: false
+          },
+          {
+            name: "Destino",
+            key: "destino",
+            sourceOrder: 1,
+            warehouseCap: 80000,
+            granaryCap: 80000,
+            current: withResourceTotal({ wood: 1000, clay: 1000, iron: 1000, crop: 1000 }),
+            hasResources: true,
+            merchantsAvailable: 10,
+            merchantsTotal: 10,
+            x: 84,
+            y: -165,
+            did: 0,
+            isInitialZone: false
+          }
+        ];
+        partyRowsState = [{ id: 1, villageKey: "destino", partyCount: 1, isDelivered: false }];
+        partyRowId = 1;
+        partyCentralKey = "central";
+        partyCentralCount = 1;
+        partyLastImportSummary = "Manual";
+        document.getElementById("partyServerHost").value = "example.travian.com";
+        document.getElementById("partyMapSqlInput").value = arguments[0];
+        document.getElementById("partyCentralRace").value = "GALOS";
+        recalc();
+        """,
+        MAP_SQL_EXAMPLE
+    )
+
+    driver.find_element(By.ID, "btnCalculatePartyLinks").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Links generados" in d.find_element(By.ID, "statusLine").text
+    )
+
+    link = driver.find_element(By.CSS_SELECTOR, "#partyResultBody .training-link-btn")
+    href = link.get_attribute("href")
+    did_cell = driver.find_element(By.CSS_SELECTOR, "#partyResultBody .training-links-table tbody tr td:nth-child(3)").text
+
+    assert "did_dest=32285" in href, "El modo combinado de grandes fiestas no uso el did correcto del map.sql manual"
+    assert did_cell == "32285", "La tabla de links del modo combinado no mostro el did correcto"
+
+
 def test_oasis(driver, base_url):
     driver.get(f"{base_url}/oasis/")
     wait_for(driver, "#btnProcess")
@@ -3559,6 +3708,9 @@ def main():
                 ("default_server_speed_x3", test_default_server_speed_x3),
                 ("roi", test_roi),
                 ("npc", test_npc),
+                ("npc_party_mode_import_add_row_and_summary", test_npc_party_mode_import_add_row_and_summary),
+                ("npc_party_mode_result_delete_removes_row", test_npc_party_mode_result_delete_removes_row),
+                ("npc_party_mode_generates_links_from_manual_map_sql", test_npc_party_mode_generates_links_from_manual_map_sql),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
                 ("npc_training_usage_guide", test_npc_training_usage_guide),
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),

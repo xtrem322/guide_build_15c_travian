@@ -20,6 +20,35 @@ let lastCopyValues = { wood:"", clay:"", iron:"", crop:"" }
 let trainingVillages = []
 let trainingCentralKey = ""
 let trainingVillageId = 0
+let partyImportedVillages = []
+let partyRowsState = []
+let partyCentralKey = ""
+let partyCentralCount = 1
+let partyRowId = 0
+let partyLastImportSummary = "Sin datos importados."
+let partyLastRenderedPlan = null
+let partySplitModeByVillage = {}
+let partyLastGeneratedLinks = []
+let partySentLinkState = {}
+let partyLinksUiState = { status: "idle", message: "" }
+let partyMapLookupByServer = {}
+
+const RESOURCE_KEYS = ["wood", "clay", "iron", "crop"]
+const PARTY_COST = withResourceTotal({
+  wood: 29700,
+  clay: 33250,
+  iron: 32000,
+  crop: 6700
+})
+const SERVER_UTC_OFFSET_HOURS = 1
+const TRAVIAN_MAP_SIZE = 401
+const MERCHANT_BASE_STATS = {
+  ROMANO: { capacity: 500, speed: 16 },
+  GALOS: { capacity: 750, speed: 24 },
+  GERMANO: { capacity: 1000, speed: 12 },
+  HUNOS: { capacity: 500, speed: 20 },
+  EGIPTO: { capacity: 750, speed: 16 }
+}
 
 function showInitError(message){
   const status = $("statusLine")
@@ -36,6 +65,62 @@ function n0(v){
 function fmtInt(n){
   const x = Math.max(0, Math.floor(n0(n)))
   return String(x)
+}
+
+function compareVillageOrder(a, b){
+  const byOrder = n0(a?.sourceOrder) - n0(b?.sourceOrder)
+  if(byOrder) return byOrder
+  return String(a?.name || "").localeCompare(String(b?.name || ""), "es")
+}
+
+function fixCommonMojibake(text){
+  return String(text || "")
+    .replace(/Ã¡/g, "a")
+    .replace(/Ã©/g, "e")
+    .replace(/Ã­/g, "i")
+    .replace(/Ã³/g, "o")
+    .replace(/Ãº/g, "u")
+    .replace(/Ã±/g, "n")
+    .replace(/ÃÁ/g, "A")
+    .replace(/Ã‰/g, "E")
+    .replace(/ÃÍ/g, "I")
+    .replace(/Ã“/g, "O")
+    .replace(/Ãš/g, "U")
+    .replace(/Ã‘/g, "N")
+    .replace(/ÃƒÆ’Ã‚Â¡/g, "a")
+    .replace(/ÃƒÆ’Ã‚Â©/g, "e")
+    .replace(/ÃƒÆ’Ã‚Â­/g, "i")
+    .replace(/ÃƒÆ’Ã‚Â³/g, "o")
+    .replace(/ÃƒÆ’Ã‚Âº/g, "u")
+    .replace(/ÃƒÆ’Ã‚Â±/g, "n")
+    .replace(/ÃƒÆ’ÃƒÂ/g, "A")
+    .replace(/ÃƒÆ’Ã¢â‚¬Â°/g, "E")
+    .replace(/ÃƒÆ’ÃƒÂ/g, "I")
+    .replace(/ÃƒÆ’Ã¢â‚¬Å“/g, "O")
+    .replace(/ÃƒÆ’Ã…Â¡/g, "U")
+    .replace(/ÃƒÆ’Ã¢â‚¬Ëœ/g, "N")
+}
+
+function cleanVillageNameText(text){
+  const tokens = fixCommonMojibake(text)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map(token => {
+      const cleaned = token.replace(/[^\p{Script=Latin}\d._()|'-]/gu, "")
+      if(!cleaned) return ""
+      if(cleaned === token) return cleaned
+      if(cleaned.length > 1 || /\d/.test(cleaned) || /^[A-Za-z][:\-]*$/u.test(token)) return cleaned
+      return ""
+    })
+    .filter(Boolean)
+
+  return tokens.join(" ").trim()
+}
+
+function isInitialZoneVillageName(name){
+  return /^ZI/i.test(String(cleanVillageNameText(name) || "").trim())
 }
 
 function fmtTime(sec){
@@ -302,16 +387,19 @@ function getRowTotals(race){
 function updateModePanels(){
   const m = $("excessMode").value
   const isTraining = m === "training"
+  const isParty = m === "party"
+  const hideClassic = isTraining || isParty
   $("modeTimePanel").style.display  = m === "time"  ? "block" : "none"
   $("modeExactPanel").style.display = m === "exact" ? "block" : "none"
   $("modeTrainingPanel").style.display = isTraining ? "block" : "none"
-  $("classicNpcWrap").style.display = isTraining ? "none" : "block"
-  $("classicNpcSubtotal").style.display = isTraining ? "none" : "block"
-  $("classicNpcTable").style.display = isTraining ? "none" : "table"
-  $("toolRaceSelect").style.display = isTraining ? "none" : "flex"
-  $("toolEqOrder").style.display = isTraining ? "none" : "flex"
-  $("toolCurTotal").style.display = isTraining ? "none" : "flex"
-  $("addRow").style.display = isTraining ? "none" : "inline-flex"
+  $("modePartyPanel").style.display = isParty ? "block" : "none"
+  $("classicNpcWrap").style.display = hideClassic ? "none" : "block"
+  $("classicNpcSubtotal").style.display = hideClassic ? "none" : "block"
+  $("classicNpcTable").style.display = hideClassic ? "none" : "table"
+  $("toolRaceSelect").style.display = hideClassic ? "none" : "flex"
+  $("toolEqOrder").style.display = hideClassic ? "none" : "flex"
+  $("toolCurTotal").style.display = hideClassic ? "none" : "flex"
+  $("addRow").style.display = hideClassic ? "none" : "inline-flex"
 }
 
 function setText(id, v){
@@ -399,7 +487,7 @@ function hasEnoughResources(have, need){
 }
 
 function normalizeVillageKey(name){
-  return String(name || "")
+  return fixCommonMojibake(name)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
@@ -408,7 +496,7 @@ function normalizeVillageKey(name){
 }
 
 function cleanTravianPaste(raw){
-  return String(raw || "")
+  return fixCommonMojibake(raw)
     .replace(/[\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/[−–—]/g, "-")
@@ -1094,6 +1182,1484 @@ function recalcTrainingMode(){
   }
 }
 
+function multiplyResources(resources, factor){
+  return withResourceTotal({
+    wood: n0(resources?.wood) * factor,
+    clay: n0(resources?.clay) * factor,
+    iron: n0(resources?.iron) * factor,
+    crop: n0(resources?.crop) * factor
+  })
+}
+
+function getResourceSurplus(current, required){
+  return withResourceTotal({
+    wood: Math.max(0, n0(current?.wood) - n0(required?.wood)),
+    clay: Math.max(0, n0(current?.clay) - n0(required?.clay)),
+    iron: Math.max(0, n0(current?.iron) - n0(required?.iron)),
+    crop: Math.max(0, n0(current?.crop) - n0(required?.crop))
+  })
+}
+
+function findTableStart(lines, type){
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i]
+    if(type === "capacity" && /^Village\s+Warehouse\s+Granary$/i.test(line)) return i + 1
+    if(type === "resources" && /^Village(?:\s+.+)?\s+Merchants$/i.test(line)) return i + 1
+  }
+
+  for(let i = 0; i < lines.length; i++){
+    if(/^Capacity$/i.test(lines[i])) return i + 1
+  }
+
+  return 0
+}
+
+function parsePartyCapacityRow(line){
+  const matches = [...String(line || "").matchAll(/\d[\d,.]*/g)]
+  if(matches.length < 2) return null
+
+  const warehouseMatch = matches[matches.length - 2]
+  const granaryMatch = matches[matches.length - 1]
+  const warehouse = parseNumberToken(warehouseMatch[0])
+  const granary = parseNumberToken(granaryMatch[0])
+  const name = cleanVillageNameText(String(line || "").slice(0, warehouseMatch.index))
+
+  if(!name || !Number.isFinite(warehouse) || !Number.isFinite(granary)) return null
+  if(/^(Village|Warehouse|Granary|Resources|Production|Capacity)$/i.test(name)) return null
+  if(/^Sum$/i.test(name)) return null
+
+  return { name, key: normalizeVillageKey(name), warehouseCap: warehouse, granaryCap: granary }
+}
+
+function parsePartyResourcesRow(line){
+  const matches = [...String(line || "").matchAll(/\d[\d,.]*/g)]
+  if(matches.length < 4) return null
+
+  const merchantTail = /\/\D*\d[\d,.]*\D*$/i.test(String(line || ""))
+  const resourceMatches = merchantTail ? matches.slice(-6, -2) : matches.slice(-4)
+  const merchantMatches = merchantTail ? matches.slice(-2) : []
+  if(resourceMatches.length < 4) return null
+
+  const numbers = resourceMatches.map(match => parseNumberToken(match[0]))
+  const name = cleanVillageNameText(String(line || "").slice(0, resourceMatches[0].index))
+
+  if(!name || numbers.some(v => !Number.isFinite(v))) return null
+  if(/^(Village|Resources|Warehouse|Production|Capacity|Merchants)$/i.test(name)) return null
+  if(/^Sum$/i.test(name)) return null
+
+  return {
+    name,
+    key: normalizeVillageKey(name),
+    current: withResourceTotal({
+      wood: numbers[0],
+      clay: numbers[1],
+      iron: numbers[2],
+      crop: numbers[3]
+    }),
+    merchantsAvailable: merchantMatches.length === 2 ? parseNumberToken(merchantMatches[0][0]) : 0,
+    merchantsTotal: merchantMatches.length === 2 ? parseNumberToken(merchantMatches[1][0]) : 0
+  }
+}
+
+function parsePartyTravianTable(raw, rowParser, type){
+  const lines = pasteLines(raw)
+  const startIdx = findTableStart(lines, type)
+  const scoped = lines.slice(startIdx)
+  const rows = []
+  const seen = new Set()
+
+  for(const line of scoped){
+    if(shouldStopTravianTable(line)) break
+    const row = rowParser(line)
+    if(!row || seen.has(row.key)) continue
+    seen.add(row.key)
+    rows.push(row)
+  }
+
+  return rows
+}
+
+function parseVillageCoordinates(raw){
+  const lines = pasteLines(raw)
+  const groupsStart = lines.findIndex(line => /^Village groups/i.test(line))
+  const scoped = groupsStart >= 0 ? lines.slice(groupsStart + 1) : lines
+  const coordsByKey = new Map()
+  let pendingName = ""
+
+  const parseCoordinateLine = (line) => {
+    const compact = cleanTravianPaste(line)
+      .replace(/[−‒–—﹣－]/g, "-")
+      .replace(/[^\d|()\-+]/g, "")
+      .replace(/\++/g, "+")
+      .replace(/-+/g, "-")
+    const match = compact.match(/\(([+\-]?\d+)\|([+\-]?\d+)\)/) || compact.match(/([+\-]?\d+)\|([+\-]?\d+)/)
+    if(!match) return null
+    return {
+      x: Number(match[1]),
+      y: Number(match[2])
+    }
+  }
+
+  for(const line of scoped){
+    const coord = parseCoordinateLine(line)
+    if(coord && pendingName){
+      const key = normalizeVillageKey(pendingName)
+      if(!coordsByKey.has(key)) coordsByKey.set(key, { key, x: coord.x, y: coord.y })
+      pendingName = ""
+      continue
+    }
+
+    const nameLine = cleanVillageNameText(line)
+    if(!nameLine) continue
+    if(/^(Village|Sum|Population|Loyalty|Capacity|Warehouse|Production|Resources|Village groups|Task overview|Homepage|Overview|Culture points|Troops|Zona Inicial|Capital|Gasolinera|Aldeas OFF|Aldeas DEFF)$/i.test(nameLine)) continue
+    if(/\d{3,}/.test(nameLine)) continue
+    pendingName = nameLine
+  }
+
+  return coordsByKey
+}
+
+function defaultPartyImportedVillage(data, previous){
+  const base = previous ? { ...previous } : {
+    sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder))),
+    merchantsAvailable: 0,
+    merchantsTotal: 0,
+    x: null,
+    y: null,
+    did: 0
+  }
+
+  const name = cleanVillageNameText(data.name)
+  return {
+    ...base,
+    name,
+    key: data.key,
+    sourceOrder: Math.max(0, Math.floor(n0(data.sourceOrder ?? base.sourceOrder))),
+    warehouseCap: Math.max(0, Math.floor(n0(data.warehouseCap))),
+    granaryCap: Math.max(0, Math.floor(n0(data.granaryCap))),
+    current: withResourceTotal(data.current),
+    hasResources: Boolean(data.hasResources),
+    merchantsAvailable: Math.max(0, Math.floor(n0(data.merchantsAvailable ?? base.merchantsAvailable))),
+    merchantsTotal: Math.max(0, Math.floor(n0(data.merchantsTotal ?? base.merchantsTotal))),
+    x: Number.isFinite(Number(data.x)) ? Number(data.x) : base.x,
+    y: Number.isFinite(Number(data.y)) ? Number(data.y) : base.y,
+    did: Math.max(0, Math.floor(n0(data.did ?? base.did))),
+    isInitialZone: isInitialZoneVillageName(name)
+  }
+}
+
+function getVillageTotalCapacity(village){
+  return Math.max(0, Math.floor(n0(village?.warehouseCap) * 3 + n0(village?.granaryCap)))
+}
+
+function findRecommendedPartyCentralKey(){
+  const best = partyImportedVillages
+    .filter(village => !village.isInitialZone)
+    .slice()
+    .sort((a, b) => {
+      const byCurrent = n0(b.current?.total) - n0(a.current?.total)
+      if(byCurrent) return byCurrent
+      const capA = getVillageTotalCapacity(a)
+      const capB = getVillageTotalCapacity(b)
+      if(capB !== capA) return capB - capA
+      return compareVillageOrder(a, b)
+    })[0]
+  return best?.key || ""
+}
+
+function getPartyCentralCandidates(){
+  return partyImportedVillages
+    .filter(village => !village.isInitialZone)
+    .slice()
+    .sort(compareVillageOrder)
+}
+
+function getPartyVillageByKey(key){
+  return partyImportedVillages.find(village => village.key === key) || null
+}
+
+function importPartyModeVillages(){
+  const capacityRows = parsePartyTravianTable($("partyCapacityInput").value, parsePartyCapacityRow, "capacity")
+  const resourceRows = parsePartyTravianTable($("partyResourcesInput").value, parsePartyResourcesRow, "resources")
+  const coordsByKey = parseVillageCoordinates($("partyCapacityInput").value)
+  const prevByKey = new Map(partyImportedVillages.map(village => [village.key, village]))
+  const resourceMap = new Map(resourceRows.map(row => [row.key, row]))
+  const resourceOrderMap = new Map(resourceRows.map((row, idx) => [row.key, idx]))
+  const capacityOrderMap = new Map(capacityRows.map((row, idx) => [row.key, idx]))
+  const merged = []
+
+  for(const capacity of capacityRows){
+    const resource = resourceMap.get(capacity.key)
+    const coords = coordsByKey.get(capacity.key)
+    const sourceOrder = resourceOrderMap.has(capacity.key)
+      ? resourceOrderMap.get(capacity.key)
+      : resourceRows.length + n0(capacityOrderMap.get(capacity.key))
+
+    merged.push(defaultPartyImportedVillage({
+      ...capacity,
+      sourceOrder,
+      current: resource ? resource.current : zeroResources(),
+      hasResources: Boolean(resource),
+      merchantsAvailable: resource?.merchantsAvailable,
+      merchantsTotal: resource?.merchantsTotal,
+      x: coords?.x,
+      y: coords?.y
+    }, prevByKey.get(capacity.key)))
+  }
+
+  merged.sort(compareVillageOrder)
+  partyImportedVillages = merged
+  partyRowsState = partyRowsState.filter(row => partyImportedVillages.some(village => village.key === row.villageKey))
+
+  if(!partyImportedVillages.some(village => village.key === partyCentralKey)){
+    partyCentralKey = findRecommendedPartyCentralKey()
+  }
+  partyRowsState = partyRowsState.filter(row => row.villageKey !== partyCentralKey)
+
+  return {
+    capacityCount: capacityRows.length,
+    resourceCount: resourceRows.length,
+    mergedCount: merged.length,
+    matchedCount: merged.filter(village => village.hasResources).length,
+    missingResourceCount: merged.filter(village => !village.hasResources).length
+  }
+}
+
+function getPartyRequirementForCount(count){
+  const normalized = Math.max(0, Math.min(2, Math.floor(n0(count))))
+  return multiplyResources(PARTY_COST, normalized)
+}
+
+function buildPartyCountsForCount(count){
+  const normalized = Math.max(0, Math.min(2, Math.floor(n0(count))))
+  if(normalized <= 0) return []
+  return [{ label:"GF", troopName:"Grandes fiestas", units: normalized }]
+}
+
+function getPartyConfiguredRows(){
+  return partyRowsState
+    .map(row => ({
+      row,
+      village: getPartyVillageByKey(row.villageKey)
+    }))
+    .filter(item => item.village)
+}
+
+function getPartyConfiguredPartyTotal(planRows){
+  return (Array.isArray(planRows) ? planRows : []).reduce((acc, item) => acc + Math.max(0, Math.floor(n0(item?.row?.partyCount))), 0)
+}
+
+function getPartyRowStatus(plan){
+  if(n0(plan?.supportFromCentral?.total) > 0 && n0(plan?.supportFromVillages?.total) > 0) return "Envio + NPC"
+  if(n0(plan?.supportFromCentral?.total) > 0) return "NPC"
+  if(n0(plan?.supportFromVillages?.total) > 0) return "Envio"
+  return "Lista"
+}
+
+function addPartyPlanRow(){
+  const villageKey = String($("partyRowVillageSelect")?.value || "")
+  if(!villageKey) return
+  if(villageKey === partyCentralKey){
+    const status = $("statusLine")
+    status.className = "statusline status-bad"
+    status.textContent = "La aldea central ya se configura aparte. Elige otra aldea destino."
+    return
+  }
+  if(partyRowsState.some(row => row.villageKey === villageKey)){
+    const status = $("statusLine")
+    status.className = "statusline status-bad"
+    status.textContent = "Esa aldea ya fue añadida al plan."
+    return
+  }
+  partyRowsState.push({
+    id: ++partyRowId,
+    villageKey,
+    partyCount: 1,
+    isDelivered: false
+  })
+  recalc()
+}
+
+function renderPartyCentralMeta(){
+  const meta = $("partyCentralMeta")
+  const central = getPartyVillageByKey(partyCentralKey)
+  if(!central){
+    meta.textContent = partyImportedVillages.length
+      ? "No hay aldeas validas para elegir como central."
+      : "Importa aldeas para elegir una central."
+    return
+  }
+
+  const reserve = getPartyRequirementForCount(partyCentralCount)
+  const recommendedKey = findRecommendedPartyCentralKey()
+  meta.innerHTML = `
+    <div class="training-central-overview">
+      <div class="training-central-card training-central-card-main">
+        <div class="training-central-card-label">Central elegida</div>
+        <div class="training-central-card-value">${central.name}</div>
+        <div class="training-central-card-help">${central.key === recommendedKey ? "Recomendada por ser la que mas recursos tiene ahora." : "Desde aqui sale el NPC y las rutas comerciales."}</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Reserva fiestas</div>
+        <div class="training-central-card-value">${fmtInt(reserve.total)}</div>
+        <div class="training-central-card-help">${fmtInt(partyCentralCount)} fiesta(s) propias.</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Recursos actuales</div>
+        <div class="training-central-card-value">${fmtInt(central.current.wood)} / ${fmtInt(central.current.clay)} / ${fmtInt(central.current.iron)} / ${fmtInt(central.current.crop)}</div>
+        <div class="training-central-card-help">Madera / Barro / Hierro / Cereal</div>
+      </div>
+      <div class="training-central-card">
+        <div class="training-central-card-label">Total y capacidad</div>
+        <div class="training-central-card-value">${fmtInt(central.current.total)}</div>
+        <div class="training-central-card-help">Almacen ${fmtInt(central.warehouseCap)} / Granero ${fmtInt(central.granaryCap)}</div>
+      </div>
+    </div>
+  `
+}
+
+function updatePartyCentralSelect(){
+  const select = $("partyCentralVillage")
+  const options = getPartyCentralCandidates().map(village => ({
+    value: village.key,
+    label: `${village.name} - Total ${fmtInt(village.current.total)}`
+  }))
+  fillSelect(select, options, false)
+  if(options.some(option => option.value === partyCentralKey)) select.value = partyCentralKey
+  else select.value = options[0]?.value || ""
+  partyCentralKey = select.value || ""
+  renderPartyCentralMeta()
+}
+
+function updatePartyRowVillageOptions(){
+  const select = $("partyRowVillageSelect")
+  const used = new Set(partyRowsState.map(row => row.villageKey))
+  const options = partyImportedVillages
+    .filter(village => village.key !== partyCentralKey && !used.has(village.key))
+    .slice()
+    .sort(compareVillageOrder)
+    .map(village => ({
+      value: village.key,
+      label: `${village.name} - Total ${fmtInt(village.current.total)}`
+    }))
+
+  fillSelect(select, options, false)
+}
+
+function renderPartySelectionTable(){
+  const body = $("partySelectionBody")
+  const wrap = $("partySelectionWrap")
+  body.innerHTML = ""
+
+  if(!partyRowsState.length){
+    wrap.style.display = "none"
+    return
+  }
+
+  wrap.style.display = "block"
+  const countOptions = [
+    { value:"1", label:"1" },
+    { value:"2", label:"2" }
+  ]
+
+  for(const row of partyRowsState){
+    const village = getPartyVillageByKey(row.villageKey)
+    if(!village) continue
+    const tr = document.createElement("tr")
+
+    const tdVillage = document.createElement("td")
+    tdVillage.className = "left"
+    const villageSelect = document.createElement("select")
+    villageSelect.className = "training-select"
+    const usedByOthers = new Set(partyRowsState.filter(item => item.id !== row.id).map(item => item.villageKey))
+    const options = partyImportedVillages
+      .filter(item => item.key !== partyCentralKey && !usedByOthers.has(item.key))
+      .slice()
+      .sort(compareVillageOrder)
+      .map(item => ({ value:item.key, label:item.name }))
+    fillSelect(villageSelect, options, false)
+    if(options.some(option => option.value === row.villageKey)) villageSelect.value = row.villageKey
+    villageSelect.addEventListener("change", () => {
+      row.villageKey = villageSelect.value || row.villageKey
+      recalc()
+    })
+    tdVillage.appendChild(villageSelect)
+    tr.appendChild(tdVillage)
+
+    const tdCount = document.createElement("td")
+    const countSelect = document.createElement("select")
+    countSelect.className = "training-level-select"
+    fillSelect(countSelect, countOptions, false)
+    countSelect.value = String(Math.max(1, Math.min(2, Math.floor(n0(row.partyCount)))))
+    countSelect.addEventListener("change", () => {
+      row.partyCount = Math.max(1, Math.min(2, Math.floor(n0(countSelect.value))))
+      recalc()
+    })
+    tdCount.appendChild(countSelect)
+    tr.appendChild(tdCount)
+
+    const readonlyValues = [
+      fmtInt(village.current.wood),
+      fmtInt(village.current.clay),
+      fmtInt(village.current.iron),
+      fmtInt(village.current.crop),
+      fmtInt(village.current.total),
+      fmtInt(village.warehouseCap),
+      fmtInt(village.granaryCap)
+    ]
+    for(const value of readonlyValues){
+      const td = document.createElement("td")
+      td.className = "readonly"
+      td.textContent = value
+      tr.appendChild(td)
+    }
+
+    const tdDelete = document.createElement("td")
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = "training-row-delete-btn"
+    button.innerHTML = "&#128465;"
+    button.addEventListener("click", () => {
+      partyRowsState = partyRowsState.filter(item => item.id !== row.id)
+      delete partySplitModeByVillage[row.villageKey]
+      recalc()
+    })
+    tdDelete.appendChild(button)
+    tr.appendChild(tdDelete)
+    body.appendChild(tr)
+  }
+}
+
+function renderPartySummary(plan){
+  const summary = $("partySummary")
+  if(!partyImportedVillages.length){
+    summary.style.display = "none"
+    summary.innerHTML = ""
+    return
+  }
+
+  const configuredRows = getPartyConfiguredRows()
+  const totalDestinationParties = getPartyConfiguredPartyTotal(configuredRows)
+  const importedWithResources = partyImportedVillages.filter(village => village.hasResources).length
+  summary.style.display = "grid"
+  summary.innerHTML = `
+    <div class="training-summary-card">
+      <div class="training-summary-label">Aldeas importadas</div>
+      <div class="training-summary-value">${fmtInt(partyImportedVillages.length)}</div>
+    </div>
+    <div class="training-summary-card">
+      <div class="training-summary-label">Con recursos</div>
+      <div class="training-summary-value">${fmtInt(importedWithResources)}</div>
+    </div>
+    <div class="training-summary-card">
+      <div class="training-summary-label">Aldeas destino</div>
+      <div class="training-summary-value">${fmtInt(configuredRows.length)}</div>
+    </div>
+    <div class="training-summary-card">
+      <div class="training-summary-label">Fiestas totales</div>
+      <div class="training-summary-value">${fmtInt((plan?.totalPartyCount ?? 0) || (partyCentralCount + totalDestinationParties))}</div>
+    </div>
+  `
+}
+
+function getCentralNpcCapError(central, resources){
+  const warehouseCap = Math.max(0, Math.floor(n0(central?.warehouseCap)))
+  const granaryCap = Math.max(0, Math.floor(n0(central?.granaryCap)))
+
+  if(n0(resources?.wood) > warehouseCap) return `El reparto NPC supera el tope de madera del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.clay) > warehouseCap) return `El reparto NPC supera el tope de barro del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.iron) > warehouseCap) return `El reparto NPC supera el tope de hierro del almacen central (${fmtInt(warehouseCap)}).`
+  if(n0(resources?.crop) > granaryCap) return `El reparto NPC supera el tope de cereal del granero central (${fmtInt(granaryCap)}).`
+  return ""
+}
+
+function evaluatePartyModePlan(){
+  if(!partyImportedVillages.length) return { feasible:false, reason:"Importa aldeas primero." }
+
+  const central = getPartyVillageByKey(partyCentralKey)
+  if(!central) return { feasible:false, reason:"Selecciona una aldea central." }
+
+  const configuredRows = getPartyConfiguredRows()
+  if(!configuredRows.length) return { feasible:false, reason:"Añade al menos una aldea destino al plan." }
+
+  const centralReserve = getPartyRequirementForCount(partyCentralCount)
+  if(n0(central.current?.total) < n0(centralReserve.total)){
+    return {
+      feasible:false,
+      reason:`La aldea central no tiene total suficiente para reservar sus ${fmtInt(partyCentralCount)} grandes fiestas (${fmtInt(centralReserve.total)}).`
+    }
+  }
+
+  const centralAvailableForNpc = Math.max(0, n0(central.current?.total) - n0(centralReserve.total))
+  const plans = configuredRows.map(item => ({
+    row: item.row,
+    village: item.village,
+    counts: buildPartyCountsForCount(item.row.partyCount),
+    required: getPartyRequirementForCount(item.row.partyCount),
+    deficit: zeroResources(),
+    deficitBeforeVillageSupport: positiveDeficit(getPartyRequirementForCount(item.row.partyCount), item.village.current),
+    surplus: getResourceSurplus(item.village.current, getPartyRequirementForCount(item.row.partyCount)),
+    supportFromVillages: zeroResources(),
+    supportFromCentral: zeroResources(),
+    status: "Lista"
+  }))
+
+  const initialNpcNeed = plans.reduce((acc, plan) => addResources(acc, plan.deficitBeforeVillageSupport), zeroResources())
+  const villageTransfers = []
+  let remainingVillageSupportNeed = Math.max(0, n0(initialNpcNeed.total) - centralAvailableForNpc)
+
+  if(remainingVillageSupportNeed > 0){
+    for(const resource of RESOURCE_KEYS){
+      const donors = plans
+        .filter(item => n0(item.surplus?.[resource]) > 0)
+        .sort((a, b) => n0(b.surplus?.[resource]) - n0(a.surplus?.[resource]))
+      const receivers = plans
+        .filter(item => n0(item.deficitBeforeVillageSupport?.[resource]) > 0)
+        .sort((a, b) => n0(b.deficitBeforeVillageSupport?.[resource]) - n0(a.deficitBeforeVillageSupport?.[resource]))
+
+      for(const receiver of receivers){
+        let missing = Math.min(n0(receiver.deficitBeforeVillageSupport?.[resource]), remainingVillageSupportNeed)
+        for(const donor of donors){
+          if(donor.village.key === receiver.village.key || missing <= 0 || remainingVillageSupportNeed <= 0) continue
+          const available = n0(donor.surplus?.[resource])
+          if(available <= 0) continue
+          const amount = Math.min(available, missing, remainingVillageSupportNeed)
+          donor.surplus[resource] -= amount
+          donor.surplus = withResourceTotal(donor.surplus)
+          receiver.deficitBeforeVillageSupport[resource] -= amount
+          receiver.deficitBeforeVillageSupport = withResourceTotal(receiver.deficitBeforeVillageSupport)
+          receiver.supportFromVillages[resource] += amount
+          receiver.supportFromVillages = withResourceTotal(receiver.supportFromVillages)
+          villageTransfers.push({
+            from: donor.village.name,
+            to: receiver.village.name,
+            resource,
+            amount
+          })
+          missing -= amount
+          remainingVillageSupportNeed -= amount
+        }
+        if(remainingVillageSupportNeed <= 0) break
+      }
+      if(remainingVillageSupportNeed <= 0) break
+    }
+  }
+
+  let centralNpcNeed = zeroResources()
+  for(const plan of plans){
+    plan.supportFromCentral = withResourceTotal(plan.deficitBeforeVillageSupport)
+    plan.deficit = withResourceTotal(plan.deficitBeforeVillageSupport)
+    plan.status = getPartyRowStatus(plan)
+    centralNpcNeed = addResources(centralNpcNeed, plan.supportFromCentral)
+  }
+
+  const centralCapError = getCentralNpcCapError(central, centralNpcNeed)
+  if(centralCapError) return { feasible:false, reason:centralCapError }
+
+  if(n0(centralNpcNeed.total) > centralAvailableForNpc){
+    return {
+      feasible:false,
+      reason:`La aldea central se agotaria tras reservar ${fmtInt(centralReserve.total)} y aun faltan ${fmtInt(centralNpcNeed.total)} para el NPC.`
+    }
+  }
+
+  return {
+    feasible:true,
+    central,
+    centralReserve,
+    totalTransfer: centralNpcNeed,
+    villageTransfers,
+    villagePlans: plans,
+    totalPartyCount: partyCentralCount + getPartyConfiguredPartyTotal(configuredRows)
+  }
+}
+
+function getResourceUi(resourceKey){
+  const resources = {
+    wood: { label:"Madera", icon:"./icons/wood.svg", className:"resource-wood" },
+    clay: { label:"Barro", icon:"./icons/clay.svg", className:"resource-clay" },
+    iron: { label:"Hierro", icon:"./icons/iron.svg", className:"resource-iron" },
+    crop: { label:"Cereal", icon:"./icons/crop.svg", className:"resource-crop" }
+  }
+  return resources[resourceKey] || { label:resourceKey, icon:"", className:"" }
+}
+
+function renderResourceLabel(resourceKey){
+  const info = getResourceUi(resourceKey)
+  return `
+    <span class="resource-pill ${info.className}">
+      <img src="${info.icon}" alt="${info.label}" class="resource-pill-icon">
+      <span>${info.label}</span>
+    </span>
+  `
+}
+
+function renderResourceBoxes(resources){
+  return `
+    <div class="npc-central-grid">
+      ${RESOURCE_KEYS.map(resourceKey => {
+        const info = getResourceUi(resourceKey)
+        return `
+          <div class="npc-central-item ${info.className}">
+            <div class="npc-central-label">${renderResourceLabel(resourceKey)}</div>
+            <div class="npc-central-value">${fmtInt(resources?.[resourceKey])}</div>
+          </div>
+        `
+      }).join("")}
+    </div>
+  `
+}
+
+function getPartySplitFactorForVillage(villageKey){
+  const factor = Math.floor(n0(partySplitModeByVillage[villageKey]))
+  return factor === 2 || factor === 3 ? factor : 0
+}
+
+function togglePartySplitFactorForVillage(villageKey, factor){
+  if(!villageKey || (factor !== 2 && factor !== 3)) return
+  partySplitModeByVillage[villageKey] = getPartySplitFactorForVillage(villageKey) === factor ? 0 : factor
+  if(partyLastRenderedPlan?.feasible) renderPartyModeResult(partyLastRenderedPlan)
+}
+
+function renderPartySplitButtons(villageKey){
+  const factor = getPartySplitFactorForVillage(villageKey)
+  return `
+    <div class="split-toggle-group">
+      <button type="button" class="split-toggle-btn ${factor === 2 ? "active" : ""}" data-village-key="${villageKey}" data-factor="2">Entre 2</button>
+      <button type="button" class="split-toggle-btn ${factor === 3 ? "active" : ""}" data-village-key="${villageKey}" data-factor="3">Entre 3</button>
+    </div>
+  `
+}
+
+function splitAmount(value, factor){
+  return factor > 1 ? Math.ceil(n0(value) / factor) : 0
+}
+
+function renderSplitValue(value, factor){
+  if(factor <= 1) return ""
+  return `<div class="split-subvalue">x${factor}: ${fmtInt(splitAmount(value, factor))}</div>`
+}
+
+function queueCountLabelWithSplit(counts, factor){
+  const active = (Array.isArray(counts) ? counts : []).filter(item => n0(item.units) > 0)
+  if(!active.length) return "-"
+
+  const formatItem = (item, units) => {
+    const troopName = String(item.troopName || "").trim()
+    return troopName ? `${item.label}: ${troopName} ${fmtInt(units)}` : `${item.label}:${fmtInt(units)}`
+  }
+
+  const main = active.map(item => formatItem(item, item.units)).join(" · ")
+  if(factor <= 1) return main
+  const split = active.map(item => formatItem(item, splitAmount(item.units, factor))).join(" · ")
+  return `${main}<div class="split-subvalue">x${factor}: ${split}</div>`
+}
+
+function getVillageCapacityFit(village, deficit){
+  const warehouseCap = Math.max(0, Math.floor(n0(village?.warehouseCap)))
+  const granaryCap = Math.max(0, Math.floor(n0(village?.granaryCap)))
+  const future = withResourceTotal({
+    wood: n0(village?.current?.wood) + n0(deficit?.wood),
+    clay: n0(village?.current?.clay) + n0(deficit?.clay),
+    iron: n0(village?.current?.iron) + n0(deficit?.iron),
+    crop: n0(village?.current?.crop) + n0(deficit?.crop)
+  })
+  const overflow = []
+  if(future.wood > warehouseCap) overflow.push("Madera")
+  if(future.clay > warehouseCap) overflow.push("Barro")
+  if(future.iron > warehouseCap) overflow.push("Hierro")
+  if(future.crop > granaryCap) overflow.push("Cereal")
+  return {
+    fits: overflow.length === 0,
+    detail: overflow.length ? `Supera: ${overflow.join(", ")}` : "Entra completo"
+  }
+}
+
+function splitResourcesForRepeat(resources, repeat){
+  const factor = Math.max(1, Math.floor(n0(repeat)))
+  return withResourceTotal({
+    wood: Math.ceil(n0(resources?.wood) / factor),
+    clay: Math.ceil(n0(resources?.clay) / factor),
+    iron: Math.ceil(n0(resources?.iron) / factor),
+    crop: Math.ceil(n0(resources?.crop) / factor)
+  })
+}
+
+function getTradeOfficeBonus(level, race){
+  const lvl = Math.max(0, Math.min(20, Math.floor(n0(level))))
+  if(lvl <= 0) return 0
+  return String(race || "").toUpperCase() === "ROMANO" ? lvl * 0.4 : lvl * 0.2
+}
+
+function getMerchantStatsForPartyVillage(village){
+  const race = String($("partyCentralRace")?.value || village?.race || "HUNOS").toUpperCase()
+  const base = MERCHANT_BASE_STATS[race] || { capacity:500, speed:16 }
+  const serverSpeed = Math.max(1, n0($("serverSpeed")?.value || 1))
+  const marketplaceLevel = Math.max(1, Math.floor(n0($("partyMarketplaceLevel")?.value || 20)))
+  const officeEnabled = Boolean($("partyTradeOfficeEnabled")?.checked)
+  const officeLevel = Math.max(0, Math.floor(n0($("partyTradeOfficeLevel")?.value || 20)))
+  const officeBonus = officeEnabled ? getTradeOfficeBonus(officeLevel, race) : 0
+  const capacityEach = Math.max(1, Math.floor(base.capacity * serverSpeed * (1 + officeBonus)))
+  const speedTilesPerHour = Math.max(1, base.speed * serverSpeed)
+  const parsedMerchantsTotal = Math.max(0, Math.floor(n0(village?.merchantsTotal)))
+  const parsedMerchantsAvailable = Math.max(0, Math.floor(n0(village?.merchantsAvailable)))
+  const merchantsTotal = Math.max(1, parsedMerchantsTotal || marketplaceLevel)
+  const merchantsAvailable = Math.max(0, parsedMerchantsAvailable || merchantsTotal)
+  return {
+    race,
+    capacityEach,
+    speedTilesPerHour,
+    merchantsAvailable,
+    merchantsTotal
+  }
+}
+
+function toroidalAxisDistance(a, b){
+  const raw = Math.abs(n0(a) - n0(b))
+  return Math.min(raw, TRAVIAN_MAP_SIZE - raw)
+}
+
+function getVillageDistance(a, b){
+  if(!Number.isFinite(Number(a?.x)) || !Number.isFinite(Number(a?.y)) || !Number.isFinite(Number(b?.x)) || !Number.isFinite(Number(b?.y))) return Number.POSITIVE_INFINITY
+  const dx = toroidalAxisDistance(a.x, b.x)
+  const dy = toroidalAxisDistance(a.y, b.y)
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function getVillageDistanceLabel(a, b){
+  const distance = getVillageDistance(a, b)
+  return Number.isFinite(distance) ? distance.toFixed(2) : "-"
+}
+
+function ceilDateToMinute(date){
+  const next = new Date(date.getTime())
+  next.setSeconds(0, 0)
+  if(next.getTime() < date.getTime()) next.setMinutes(next.getMinutes() + 1)
+  return next
+}
+
+function ceilReturnedMerchantReadyDate(date){
+  const next = ceilDateToMinute(date)
+  if(date.getSeconds() === 0 && date.getMilliseconds() === 0) next.setMinutes(next.getMinutes() + 1)
+  return next
+}
+
+function getServerTimeFromLocal(date){
+  const base = new Date(date instanceof Date ? date.getTime() : Date.now())
+  const utcMs = base.getTime() + base.getTimezoneOffset() * 60000
+  return new Date(utcMs + SERVER_UTC_OFFSET_HOURS * 3600000)
+}
+
+function addMinutes(date, minutes){
+  return new Date(date.getTime() + Math.max(0, n0(minutes)) * 60000)
+}
+
+function addSeconds(date, seconds){
+  return new Date(date.getTime() + Math.max(0, n0(seconds)) * 1000)
+}
+
+function buildTradeRouteUrl(data){
+  const host = String(data.serverHost || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")
+  const params = new URLSearchParams({
+    gid: "17",
+    t: "3",
+    did_dest: String(Math.floor(n0(data.didDest))),
+    r1: String(Math.floor(n0(data.wood))),
+    r2: String(Math.floor(n0(data.clay))),
+    r3: String(Math.floor(n0(data.iron))),
+    r4: String(Math.floor(n0(data.crop))),
+    trade_route_mode: "send",
+    hour: String(Math.floor(n0(data.hour))),
+    minute: String(Math.floor(n0(data.minute))),
+    repeat: String(Math.max(1, Math.floor(n0(data.repeat)))),
+    every: String(Math.max(1, Math.floor(n0(data.every)))),
+    action: "traderoute"
+  })
+  return `https://${host}/build.php?${params.toString()}`
+}
+
+function chooseRepeatAndPayload(village, deficit, centralStats){
+  const baseFit = getVillageCapacityFit(village, deficit)
+  const minRepeat = baseFit.fits ? 1 : 2
+  const merchantsPool = Math.max(1, Math.floor(n0(centralStats.merchantsTotal || centralStats.merchantsAvailable || 1)))
+  const perTripCapacity = merchantsPool * Math.max(1, Math.floor(n0(centralStats.capacityEach)))
+
+  for(let repeat = minRepeat; repeat <= 3; repeat++){
+    const perTrip = splitResourcesForRepeat(deficit, repeat)
+    const fit = getVillageCapacityFit(village, perTrip)
+    if(!fit.fits) continue
+    if(perTrip.total <= perTripCapacity){
+      return {
+        repeat,
+        perTrip,
+        fit,
+        merchantsNeeded: Math.max(1, Math.ceil(perTrip.total / Math.max(1, centralStats.capacityEach))),
+        overMerchantCapacity: false
+      }
+    }
+  }
+
+  const repeat = 3
+  const perTrip = splitResourcesForRepeat(deficit, repeat)
+  return {
+    repeat,
+    perTrip,
+    fit: getVillageCapacityFit(village, perTrip),
+    merchantsNeeded: Math.max(1, Math.ceil(perTrip.total / Math.max(1, centralStats.capacityEach))),
+    overMerchantCapacity: perTrip.total > perTripCapacity
+  }
+}
+
+function getTravelSecondsBetweenVillages(origin, target, speedTilesPerHour){
+  const distance = getVillageDistance(origin, target)
+  if(!Number.isFinite(distance)) return 0
+  const seconds = (distance / Math.max(1, n0(speedTilesPerHour))) * 3600
+  return Math.max(0, Math.ceil(seconds))
+}
+
+function reserveMerchantWindow(freeAtMsList, merchantsNeeded, earliestDate, occupiedSeconds){
+  const baseMs = Math.max(0, new Date(earliestDate instanceof Date ? earliestDate.getTime() : Date.now()).getTime())
+  const pool = Array.isArray(freeAtMsList) ? freeAtMsList : []
+  const needed = Math.max(1, Math.min(Math.floor(n0(merchantsNeeded || 1)), Math.max(1, pool.length)))
+  const picked = []
+
+  pool.sort((a, b) => a - b)
+  for(let idx = 0; idx < needed; idx++) picked.push(pool.shift() ?? baseMs)
+
+  const earliestReadyMs = Math.max(baseMs, ...picked)
+  const sendDate = earliestReadyMs > baseMs
+    ? ceilReturnedMerchantReadyDate(new Date(earliestReadyMs))
+    : ceilDateToMinute(new Date(earliestReadyMs))
+  const releaseDate = addSeconds(sendDate, occupiedSeconds)
+  const releaseMs = releaseDate.getTime()
+  for(let idx = 0; idx < picked.length; idx++) pool.push(releaseMs)
+
+  return { sendDate, releaseDate }
+}
+
+function formatDateAsServerHm(date){
+  const serverDate = getServerTimeFromLocal(date)
+  return {
+    hour: serverDate.getHours(),
+    minute: serverDate.getMinutes(),
+    label: `${String(serverDate.getHours()).padStart(2, "0")}:${String(serverDate.getMinutes()).padStart(2, "0")}`
+  }
+}
+
+function formatDateAsServerHms(date){
+  const serverDate = getServerTimeFromLocal(date)
+  return {
+    label: `${String(serverDate.getHours()).padStart(2, "0")}:${String(serverDate.getMinutes()).padStart(2, "0")}:${String(serverDate.getSeconds()).padStart(2, "0")}`
+  }
+}
+
+function escapeHtml(text){
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function updatePartyMapSqlStatus(message, tone){
+  const status = $("partyMapSqlStatus")
+  if(!status) return
+  status.className = "training-map-status"
+  if(tone === "ok") status.classList.add("is-ok")
+  if(tone === "bad") status.classList.add("is-bad")
+  status.textContent = message
+}
+
+function getManualPartyMapSqlText(){
+  return String($("partyMapSqlInput")?.value || "").trim()
+}
+
+function parseMapSqlToLookup(sqlText){
+  const lookup = {}
+  const text = String(sqlText || "")
+  const vdataInsertRegex = /INSERT INTO\s+`vdata`\s+VALUES\s*(.+?);/gis
+  let insertMatch
+  while((insertMatch = vdataInsertRegex.exec(text)) !== null){
+    const valuesChunk = insertMatch[1]
+    const rowRegex = /\((\d+),'((?:\\'|[^'])*)',(-?\d+),(-?\d+),/g
+    let rowMatch
+    while((rowMatch = rowRegex.exec(valuesChunk)) !== null){
+      const did = Math.floor(n0(rowMatch[1]))
+      const x = Math.floor(n0(rowMatch[3]))
+      const y = Math.floor(n0(rowMatch[4]))
+      lookup[`${x},${y}`] = did
+    }
+  }
+
+  const xWorldInsertRegex = /INSERT INTO\s+`x_world`\s+VALUES\s*(.+?);/gis
+  while((insertMatch = xWorldInsertRegex.exec(text)) !== null){
+    const valuesChunk = insertMatch[1]
+    const rowRegex = /\(\s*\d+\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*\d+\s*,\s*(\d+)\s*,/g
+    let rowMatch
+    while((rowMatch = rowRegex.exec(valuesChunk)) !== null){
+      const x = Math.floor(n0(rowMatch[1]))
+      const y = Math.floor(n0(rowMatch[2]))
+      const did = Math.floor(n0(rowMatch[3]))
+      if(did > 0) lookup[`${x},${y}`] = did
+    }
+  }
+  return lookup
+}
+
+function parseManualPartyMapSql(){
+  const text = getManualPartyMapSqlText()
+  if(!text) return null
+  const lookup = parseMapSqlToLookup(text)
+  const count = Object.keys(lookup).length
+  if(!count) throw new Error("El map.sql manual no contiene registros validos de aldeas.")
+  return { lookup, count }
+}
+
+function refreshPartyMapSqlStatus(){
+  const manualText = getManualPartyMapSqlText()
+  if(!manualText){
+    updatePartyMapSqlStatus("Si el servidor bloquea map.sql, pegalo aqui o carga el archivo para generar los links.", "")
+    return
+  }
+  try {
+    const parsed = parseManualPartyMapSql()
+    updatePartyMapSqlStatus(`map.sql manual listo: ${fmtInt(parsed?.count)} aldeas detectadas.`, "ok")
+  } catch (_error){
+    updatePartyMapSqlStatus("El map.sql manual no parece valido. Debe contener inserts de aldeas.", "bad")
+  }
+}
+
+async function getPartyMapDidLookup(serverHost){
+  const host = String(serverHost || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")
+  const manual = parseManualPartyMapSql()
+  if(manual){
+    updatePartyMapSqlStatus(`Usando map.sql manual: ${fmtInt(manual.count)} aldeas detectadas.`, "ok")
+    return manual.lookup
+  }
+
+  const localProjectUrl = new URL("../map.sql", window.location.href).toString()
+  try {
+    const localResponse = await fetch(localProjectUrl, { cache:"no-store" })
+    if(localResponse.ok){
+      const localText = await localResponse.text()
+      const localLookup = parseMapSqlToLookup(localText)
+      const localCount = Object.keys(localLookup).length
+      if(localCount){
+        updatePartyMapSqlStatus(`Usando map.sql del proyecto: ${fmtInt(localCount)} aldeas detectadas.`, "ok")
+        return localLookup
+      }
+    }
+  } catch (_error){
+    // Seguimos con la descarga remota.
+  }
+
+  if(!host){
+    updatePartyMapSqlStatus("Falta servidor Travian o map.sql manual para generar los links.", "bad")
+    throw new Error("Define un servidor valido o carga map.sql para consultar los did.")
+  }
+  if(partyMapLookupByServer[host]) return partyMapLookupByServer[host]
+
+  const response = await fetch(`https://${host}/map.sql`, { cache:"no-store" })
+  if(!response.ok){
+    updatePartyMapSqlStatus("No se pudo descargar map.sql del servidor. Usa el map.sql local o cargalo manualmente.", "bad")
+    throw new Error(`HTTP ${response.status} al cargar map.sql desde ${host}.`)
+  }
+  const text = await response.text()
+  const lookup = parseMapSqlToLookup(text)
+  const count = Object.keys(lookup).length
+  if(!count){
+    updatePartyMapSqlStatus("Se descargo map.sql pero no se encontraron aldeas validas. Usa el archivo local o manual.", "bad")
+    throw new Error(`El map.sql descargado desde ${host} no contiene aldeas validas.`)
+  }
+  partyMapLookupByServer[host] = lookup
+  updatePartyMapSqlStatus(`Usando map.sql remoto: ${fmtInt(count)} aldeas detectadas.`, "ok")
+  return lookup
+}
+
+async function readPartyMapSqlFile(file){
+  if(!file) return ""
+  if(typeof file.text === "function") return file.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo map.sql."))
+    reader.readAsText(file)
+  })
+}
+
+function getPartyPlansInConfiguredOrder(plan){
+  const orderByKey = new Map(partyRowsState.map((row, index) => [row.villageKey, index]))
+  return (Array.isArray(plan?.villagePlans) ? plan.villagePlans : [])
+    .slice()
+    .sort((a, b) => n0(orderByKey.get(a?.village?.key)) - n0(orderByKey.get(b?.village?.key)))
+}
+
+async function generatePartyTradeLinks(plan){
+  if(!plan?.feasible) throw new Error("No hay un plan NPC valido para generar links.")
+  const serverHost = String($("partyServerHost")?.value || "").trim()
+  if(!serverHost) throw new Error("Define el servidor Travian antes de calcular links.")
+
+  const lookup = await getPartyMapDidLookup(serverHost)
+  for(const village of partyImportedVillages){
+    if(Number.isFinite(Number(village.x)) && Number.isFinite(Number(village.y))){
+      village.did = Math.max(0, Math.floor(n0(lookup[`${village.x},${village.y}`])))
+    }
+  }
+
+  const central = getPartyVillageByKey(partyCentralKey)
+  if(!central) throw new Error("Selecciona una aldea central.")
+  const centralStats = getMerchantStatsForPartyVillage(central)
+  const now = addMinutes(new Date(), Math.max(0, Math.floor(n0($("partyLinkLeadMinutes")?.value || 1))))
+  const merchantPoolSize = Math.max(1, Math.floor(n0(centralStats.merchantsTotal || centralStats.merchantsAvailable || 1)))
+  const merchantFreeAtMs = Array.from({ length: merchantPoolSize }, () => now.getTime())
+
+  const rows = []
+  for(const item of getPartyPlansInConfiguredOrder(plan)){
+    if(!item.counts.length || item.deficit.total <= 0) continue
+    if(!Number.isFinite(Number(item.village.x)) || !Number.isFinite(Number(item.village.y))){
+      rows.push({
+        villageKey: item.village.key,
+        villageName: item.village.name,
+        error: "Faltan coordenadas en Capacidad aldea."
+      })
+      continue
+    }
+    if(n0(item.village.did) <= 0){
+      rows.push({
+        villageKey: item.village.key,
+        villageName: item.village.name,
+        error: "No se encontro did_dest en map.sql para esas coordenadas."
+      })
+      continue
+    }
+
+    const repeatInfo = chooseRepeatAndPayload(item.village, item.deficit, centralStats)
+    const travelSeconds = getTravelSecondsBetweenVillages(central, item.village, centralStats.speedTilesPerHour)
+    const roundTripSeconds = Math.max(0, travelSeconds * 2 * repeatInfo.repeat)
+    const merchantWindow = reserveMerchantWindow(
+      merchantFreeAtMs,
+      repeatInfo.merchantsNeeded,
+      now,
+      roundTripSeconds
+    )
+    const sendInfo = formatDateAsServerHm(merchantWindow.sendDate)
+    const url = buildTradeRouteUrl({
+      serverHost,
+      didDest: item.village.did,
+      wood: repeatInfo.perTrip.wood,
+      clay: repeatInfo.perTrip.clay,
+      iron: repeatInfo.perTrip.iron,
+      crop: repeatInfo.perTrip.crop,
+      hour: sendInfo.hour,
+      minute: sendInfo.minute,
+      repeat: repeatInfo.repeat,
+      every: 24
+    })
+
+    rows.push({
+      villageKey: item.village.key,
+      villageName: item.village.name,
+      distanceLabel: getVillageDistanceLabel(central, item.village),
+      didDest: item.village.did,
+      travelSeconds,
+      merchantSpeed: centralStats.speedTilesPerHour,
+      repeat: repeatInfo.repeat,
+      sendLabel: sendInfo.label,
+      nextReadyLabel: formatDateAsServerHms(merchantWindow.releaseDate).label,
+      perTripTotal: repeatInfo.perTrip.total,
+      merchantsNeeded: repeatInfo.merchantsNeeded,
+      capacityEach: centralStats.capacityEach,
+      merchantTotalCapacity: repeatInfo.merchantsNeeded * centralStats.capacityEach,
+      fitDetail: repeatInfo.fit.detail,
+      fitOk: repeatInfo.fit.fits,
+      overMerchantCapacity: Boolean(repeatInfo.overMerchantCapacity),
+      url
+    })
+  }
+
+  partyLastGeneratedLinks = rows
+  return rows
+}
+
+function sanitizePartyLinkError(error){
+  const raw = String(error?.message || error || "").trim()
+  if(!raw) return "No se pudieron generar los links. Revisa el servidor y vuelve a intentar."
+  if(/No hay un plan NPC valido/i.test(raw)) return "Primero genera un plan NPC valido."
+  if(/Define el servidor|carga map\.sql/i.test(raw)) return "Define el servidor Travian o usa el map.sql del proyecto, pegado o cargado manualmente."
+  if(/Selecciona una aldea central/i.test(raw)) return "Selecciona una aldea central para calcular los links."
+  if(/manual no contiene registros validos/i.test(raw)) return "El map.sql manual no parece valido. Debe contener las aldeas del mapa."
+  if(/Failed to fetch|NetworkError|Load failed|ERR_/i.test(raw)) return "No se pudo conectar con el servidor para descargar map.sql. Usa el map.sql del proyecto o cargalo manualmente."
+  if(/HTTP\s+\d+/i.test(raw) && /map\.sql/i.test(raw)) return "No se pudo descargar map.sql del servidor configurado. Usa el map.sql del proyecto o cargalo manualmente."
+  if(/map\.sql/i.test(raw)) return "No se pudo leer map.sql. Usa el archivo del proyecto o cargalo manualmente."
+  return "No se pudieron generar los links. Revisa coordenadas, servidor y vuelve a intentar."
+}
+
+function getPartyLinkStateKey(item){
+  return [
+    String(item?.villageKey || item?.villageName || ""),
+    String(Math.floor(n0(item?.didDest))),
+    String(item?.sendLabel || ""),
+    String(item?.url || "")
+  ].join("|")
+}
+
+function renderPartyLinksFeedback(){
+  const message = escapeHtml(partyLinksUiState.message || "")
+  if(partyLinksUiState.status === "loading"){
+    return `
+      <div class="training-links-feedback is-loading" role="status" aria-live="polite">
+        <div class="training-links-feedback-row">
+          <strong>Generando links...</strong>
+          <span>${message || "Consultando map.sql y calculando rutas comerciales."}</span>
+        </div>
+        <div class="training-links-progress" aria-hidden="true"><span></span></div>
+      </div>
+    `
+  }
+  if(partyLinksUiState.status === "error"){
+    return `
+      <div class="training-links-feedback is-error" role="alert">
+        <strong>No se pudieron generar los links.</strong>
+        <span>${message || "Revisa el servidor, las coordenadas y vuelve a intentar."}</span>
+      </div>
+    `
+  }
+  if(partyLinksUiState.status === "success" && partyLinksUiState.message){
+    return `
+      <div class="training-links-feedback is-success" role="status" aria-live="polite">
+        <strong>Links listos.</strong>
+        <span>${message}</span>
+      </div>
+    `
+  }
+  return ""
+}
+
+function renderPartyLinksTable(rows){
+  if(!Array.isArray(rows) || !rows.length){
+    return `<div class="training-note" style="margin-top:10px">Todavia no hay links calculados.</div>`
+  }
+
+  return `
+    <table class="training-transfer-table training-links-table">
+      <thead>
+        <tr>
+          <th class="left">Aldea</th>
+          <th>Dist.</th>
+          <th>DID</th>
+          <th>Salida</th>
+          <th>Velocidad</th>
+          <th>Viaje</th>
+          <th>Regreso</th>
+          <th>Repeat</th>
+          <th>Total viaje</th>
+          <th>Merc.</th>
+          <th>Detalle</th>
+          <th>Enviar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(item => {
+          if(item.error){
+            return `
+              <tr>
+                <td class="left">${escapeHtml(item.villageName)}</td>
+                <td colspan="11" class="left training-link-error">${escapeHtml(item.error)}</td>
+              </tr>
+            `
+          }
+          return `
+            <tr>
+              <td class="left">${escapeHtml(item.villageName)}</td>
+              <td>${escapeHtml(item.distanceLabel)}</td>
+              <td>${fmtInt(item.didDest)}</td>
+              <td>${escapeHtml(item.sendLabel)}</td>
+              <td>${fmtInt(item.merchantSpeed)} c/h</td>
+              <td>${fmtTime(item.travelSeconds)}</td>
+              <td>${escapeHtml(item.nextReadyLabel)}</td>
+              <td>${fmtInt(item.repeat)}</td>
+              <td>${fmtInt(item.perTripTotal)}</td>
+              <td>${fmtInt(item.merchantsNeeded)} x ${fmtInt(item.capacityEach)} = ${fmtInt(item.merchantTotalCapacity)}</td>
+              <td>${escapeHtml(item.fitDetail)}${item.overMerchantCapacity ? " · Espera mercaderes" : ""}</td>
+              <td><a class="btn btn-orange training-link-btn${partySentLinkState[getPartyLinkStateKey(item)] ? " is-sent" : ""}" data-link-key="${escapeHtml(getPartyLinkStateKey(item))}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${partySentLinkState[getPartyLinkStateKey(item)] ? "Enviado" : "Enviar"}</a></td>
+            </tr>
+          `
+        }).join("")}
+      </tbody>
+    </table>
+  `
+}
+
+function openAllPartyLinks(){
+  const validLinks = partyLastGeneratedLinks.filter(item => item.url)
+  for(const item of validLinks){
+    window.open(item.url, "_blank", "noopener,noreferrer")
+  }
+}
+
+function renderPartyModeResult(plan){
+  const wrap = $("partyResultWrap")
+  const body = $("partyResultBody")
+  partyLastRenderedPlan = plan || null
+
+  if(!plan?.feasible){
+    wrap.style.display = "none"
+    body.innerHTML = ""
+    return
+  }
+
+  wrap.style.display = "block"
+  const centralRemainingTotal = Math.max(0, n0(plan.central.current?.total) - n0(plan.centralReserve?.total) - n0(plan.totalTransfer?.total))
+  const generatedLinksCount = partyLastGeneratedLinks.filter(item => item.url).length
+
+  body.innerHTML = `
+    <div class="training-result-meta">
+      <div class="training-summary-card">
+        <div class="training-summary-label">Aldea central</div>
+        <div class="training-summary-value">${plan.central.name}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">Reserva central</div>
+        <div class="training-summary-value">${fmtInt(plan.centralReserve.total)}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">NPC total</div>
+        <div class="training-summary-value">${fmtInt(plan.totalTransfer.total)}</div>
+      </div>
+      <div class="training-summary-card">
+        <div class="training-summary-label">Central restante</div>
+        <div class="training-summary-value">${fmtInt(centralRemainingTotal)}</div>
+      </div>
+    </div>
+    <div class="training-result-meta training-result-meta-wide">
+      <div class="training-summary-card training-summary-card-wide">
+        <div class="training-summary-label">Reserva central por fiestas</div>
+        ${renderResourceBoxes(plan.centralReserve)}
+      </div>
+    </div>
+    <div class="training-result-meta training-result-meta-wide">
+      <div class="training-summary-card training-summary-card-wide">
+        <div class="training-summary-label">NPC central</div>
+        ${renderResourceBoxes(plan.totalTransfer)}
+      </div>
+    </div>
+    <div class="training-result-actions">
+      <button type="button" class="btn btn-orange" id="btnCalculatePartyLinks">Calcular links</button>
+      <button type="button" class="btn" id="btnOpenAllPartyLinks" ${generatedLinksCount ? "" : "disabled"}>Abrir todo</button>
+    </div>
+    <table class="training-transfer-table">
+      <thead>
+        <tr>
+          <th>Entregado?</th>
+          <th class="left">Aldea</th>
+          <th>Estado</th>
+          <th>Fiestas</th>
+          <th>${renderResourceLabel("wood")}</th>
+          <th>${renderResourceLabel("clay")}</th>
+          <th>${renderResourceLabel("iron")}</th>
+          <th>${renderResourceLabel("crop")}</th>
+          <th>Total</th>
+          <th>CALZA?</th>
+          <th>Quitar</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${getPartyPlansInConfiguredOrder(plan).map(item => {
+          const splitFactor = getPartySplitFactorForVillage(item.village.key)
+          const deliveredClass = item.row.isDelivered ? " is-delivered" : ""
+          const totalToSend = withResourceTotal(item.deficit)
+          const capacityFit = getVillageCapacityFit(item.village, item.deficit)
+          const warnStatus = /NPC|Envio/.test(item.status)
+          return `
+            <tr class="training-transfer-row${deliveredClass}" data-village-key="${item.village.key}">
+              <td>
+                <label class="training-delivered-toggle" title="Marcar aldea como entregada">
+                  <input type="checkbox" class="training-delivered-check" data-row-id="${item.row.id}" ${item.row.isDelivered ? "checked" : ""}>
+                  <span>OK</span>
+                </label>
+              </td>
+              <td class="left"><span class="training-village-name">${item.village.name}</span></td>
+              <td class="${warnStatus ? "training-status-warn" : "training-status-ok"}">${item.status}</td>
+              <td>
+                <div class="split-cell-main">${queueCountLabelWithSplit(item.counts, splitFactor)}</div>
+                ${renderPartySplitButtons(item.village.key)}
+              </td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.wood)}</div>${renderSplitValue(item.deficit.wood, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.clay)}</div>${renderSplitValue(item.deficit.clay, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.iron)}</div>${renderSplitValue(item.deficit.iron, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(item.deficit.crop)}</div>${renderSplitValue(item.deficit.crop, splitFactor)}</td>
+              <td><div class="split-cell-main">${fmtInt(totalToSend.total)}</div>${renderSplitValue(totalToSend.total, splitFactor)}</td>
+              <td>
+                <div class="training-fit-pill ${capacityFit.fits ? "ok" : "bad"}">${capacityFit.fits ? "SI" : "NO"}</div>
+                <div class="training-fit-note">${capacityFit.detail}</div>
+              </td>
+              <td>
+                <button type="button" class="training-row-delete-btn" data-row-id="${item.row.id}" title="Quitar esta aldea del calculo" aria-label="Quitar ${item.village.name} del calculo">&#128465;</button>
+              </td>
+            </tr>
+          `
+        }).join("")}
+      </tbody>
+    </table>
+    ${plan.villageTransfers.length ? `
+      <div class="troop-matrix-title" style="margin-top:18px">Envios Entre Aldeas</div>
+      <table class="training-transfer-table">
+        <thead>
+          <tr>
+            <th class="left">Desde</th>
+            <th class="left">Hacia</th>
+            <th>Recurso</th>
+            <th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${plan.villageTransfers.map(item => `
+            <tr>
+              <td class="left">${item.from}</td>
+              <td class="left">${item.to}</td>
+              <td>${getResourceUi(item.resource).label}</td>
+              <td>${fmtInt(item.amount)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    ` : ""}
+    <div class="troop-matrix-title" style="margin-top:18px">Links Rutas Comerciales</div>
+    ${renderPartyLinksFeedback()}
+    <div class="training-links-wrap">${renderPartyLinksTable(partyLastGeneratedLinks)}</div>
+  `
+
+  body.querySelectorAll(".split-toggle-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      togglePartySplitFactorForVillage(
+        button.getAttribute("data-village-key") || "",
+        Math.floor(n0(button.getAttribute("data-factor")))
+      )
+    })
+  })
+
+  body.querySelectorAll(".training-delivered-check").forEach((input) => {
+    input.addEventListener("change", () => {
+      const rowId = Math.floor(n0(input.getAttribute("data-row-id")))
+      const row = partyRowsState.find(item => item.id === rowId)
+      if(row) row.isDelivered = Boolean(input.checked)
+      renderPartyModeResult(partyLastRenderedPlan?.feasible ? partyLastRenderedPlan : null)
+    })
+  })
+
+  body.querySelectorAll(".training-row-delete-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const rowId = Math.floor(n0(button.getAttribute("data-row-id")))
+      const row = partyRowsState.find(item => item.id === rowId)
+      if(row) delete partySplitModeByVillage[row.villageKey]
+      partyRowsState = partyRowsState.filter(item => item.id !== rowId)
+      recalc()
+    })
+  })
+
+  body.querySelectorAll(".training-link-btn").forEach((link) => {
+    link.addEventListener("click", () => {
+      const key = link.getAttribute("data-link-key") || ""
+      if(!key) return
+      partySentLinkState[key] = true
+      link.classList.add("is-sent")
+      link.textContent = "Enviado"
+    })
+  })
+
+  const calcLinksButton = body.querySelector("#btnCalculatePartyLinks")
+  if(calcLinksButton){
+    calcLinksButton.addEventListener("click", async () => {
+      calcLinksButton.disabled = true
+      partyLinksUiState = {
+        status:"loading",
+        message:"Consultando map.sql y calculando rutas comerciales."
+      }
+      renderPartyModeResult(partyLastRenderedPlan?.feasible ? partyLastRenderedPlan : null)
+      try {
+        const rows = await generatePartyTradeLinks(partyLastRenderedPlan?.feasible ? partyLastRenderedPlan : null)
+        partySentLinkState = {}
+        partyLinksUiState = {
+          status:"success",
+          message:`${fmtInt(rows.filter(item => item.url).length)} links generados.`
+        }
+        renderPartyModeResult(partyLastRenderedPlan?.feasible ? partyLastRenderedPlan : null)
+        const status = $("statusLine")
+        status.className = "statusline status-ok"
+        status.textContent = `OK. Links generados: ${fmtInt(rows.filter(item => item.url).length)}`
+      } catch (error){
+        partyLinksUiState = {
+          status:"error",
+          message:sanitizePartyLinkError(error)
+        }
+        renderPartyModeResult(partyLastRenderedPlan?.feasible ? partyLastRenderedPlan : null)
+        const status = $("statusLine")
+        status.className = "statusline status-bad"
+        status.textContent = partyLinksUiState.message
+      } finally {
+        const activeButton = $("btnCalculatePartyLinks")
+        if(activeButton) activeButton.disabled = false
+      }
+    })
+  }
+
+  const openAllButton = body.querySelector("#btnOpenAllPartyLinks")
+  if(openAllButton){
+    openAllButton.addEventListener("click", () => {
+      openAllPartyLinks()
+    })
+  }
+}
+
+function recalcPartyMode(){
+  partyLastGeneratedLinks = []
+  partySentLinkState = {}
+  partyLinksUiState = { status:"idle", message:"" }
+
+  updatePartyCentralSelect()
+  updatePartyRowVillageOptions()
+  renderPartySelectionTable()
+  refreshPartyMapSqlStatus()
+
+  if(!partyImportedVillages.length){
+    partyLastImportSummary = "Sin datos importados."
+    $("partyImportStatus").textContent = partyLastImportSummary
+    renderPartySummary(null)
+    renderPartyModeResult(null)
+    const status = $("statusLine")
+    status.className = "statusline"
+    status.textContent = "Pega Capacidad aldea y Los Recursos para empezar."
+    return
+  }
+
+  renderPartySummary(null)
+
+  const missingResources = partyImportedVillages.filter(village => !village.hasResources)
+  if(missingResources.length){
+    $("partyImportStatus").textContent = partyLastImportSummary
+    renderPartyModeResult(null)
+    const status = $("statusLine")
+    status.className = "statusline status-bad"
+    status.textContent = `Capacidad importada para ${fmtInt(partyImportedVillages.length)} aldeas. Falta pegar Los Recursos para ${fmtInt(missingResources.length)}.`
+    return
+  }
+
+  const plan = evaluatePartyModePlan()
+  renderPartySummary(plan.feasible ? plan : null)
+  renderPartyModeResult(plan.feasible ? plan : null)
+
+  const status = $("statusLine")
+  if(plan.feasible){
+    $("partyImportStatus").textContent = `Fiestas totales: ${fmtInt(plan.totalPartyCount)} · Reserva central: ${fmtInt(plan.centralReserve.total)} · NPC central: ${fmtInt(plan.totalTransfer.total)}`
+    status.className = "statusline status-ok"
+    status.textContent = `OK. Aldeas destino: ${fmtInt(plan.villagePlans.length)} · NPC total: ${fmtInt(plan.totalTransfer.total)}`
+  } else {
+    $("partyImportStatus").textContent = partyLastImportSummary
+    status.className = "statusline status-bad"
+    status.textContent = plan.reason
+  }
+}
+
 function renderTimeTroopMatrix(detail, leftover){
   const wrap = $("timeTroopMatrix")
   if(!wrap) return
@@ -1229,6 +2795,11 @@ function recalc(){
 
   if($("excessMode").value === "training"){
     recalcTrainingMode()
+    return
+  }
+
+  if($("excessMode").value === "party"){
+    recalcPartyMode()
     return
   }
 
@@ -1546,6 +3117,19 @@ async function init(){
   fillTrainingLevelSelect("lvlStable")
   fillTrainingLevelSelect("lvlWorkshop")
 
+  fillSelect($("partyCentralRace"), raceList().map(r => ({ value:r, label:r })), false)
+  $("partyCentralRace").value = "HUNOS"
+  fillSelect($("partyMarketplaceLevel"), Array.from({ length: 20 }, (_, idx) => ({
+    value: String(idx + 1),
+    label: String(idx + 1)
+  })), false)
+  fillSelect($("partyTradeOfficeLevel"), Array.from({ length: 21 }, (_, idx) => ({
+    value: String(idx),
+    label: String(idx)
+  })), false)
+  $("partyMarketplaceLevel").value = "20"
+  $("partyTradeOfficeLevel").value = "20"
+
   $("allyBonus").addEventListener("change",      recalc)
   $("trooperBoost").addEventListener("change",   recalc)
   $("helmetBarracks").addEventListener("change", recalc)
@@ -1583,6 +3167,64 @@ async function init(){
       recalc()
     })
   }
+  $("btnImportPartyMode").addEventListener("click", () => {
+    const info = importPartyModeVillages()
+    if(info.mergedCount > 0){
+      if(info.resourceCount === 0){
+        partyLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Importadas: ${fmtInt(info.mergedCount)} · Falta pegar Los Recursos.`
+      } else if(info.missingResourceCount > 0){
+        partyLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)} · Con recursos: ${fmtInt(info.matchedCount)} · Sin recursos: ${fmtInt(info.missingResourceCount)}`
+      } else {
+        partyLastImportSummary = `Capacidad: ${fmtInt(info.capacityCount)} · Recursos: ${fmtInt(info.resourceCount)} · Cruce valido: ${fmtInt(info.mergedCount)}`
+      }
+    } else {
+      partyLastImportSummary = info.capacityCount > 0
+        ? "No se reconocieron aldeas validas para importar."
+        : "No se encontraron aldeas en el bloque de Capacidad aldea."
+    }
+    $("partyImportStatus").textContent = partyLastImportSummary
+    recalc()
+  })
+  $("partyCentralVillage").addEventListener("change", () => {
+    partyCentralKey = $("partyCentralVillage").value || ""
+    partyRowsState = partyRowsState.filter(row => row.villageKey !== partyCentralKey)
+    recalc()
+  })
+  $("partyCentralCount").addEventListener("change", () => {
+    partyCentralCount = Math.max(0, Math.min(2, Math.floor(n0($("partyCentralCount").value || 0))))
+    recalc()
+  })
+  $("partyCentralRace").addEventListener("change", recalc)
+  $("partyTradeOfficeEnabled").addEventListener("change", recalc)
+  $("partyMarketplaceLevel").addEventListener("change", recalc)
+  $("partyTradeOfficeLevel").addEventListener("change", recalc)
+  $("partyServerHost").addEventListener("input", recalc)
+  $("partyLinkLeadMinutes").addEventListener("input", recalc)
+  $("partyMapSqlInput").addEventListener("input", () => {
+    partyMapLookupByServer = {}
+    refreshPartyMapSqlStatus()
+  })
+  $("partyMapSqlFile").addEventListener("change", async (ev) => {
+    const file = ev.target?.files?.[0]
+    if(!file) return
+    try {
+      $("partyMapSqlInput").value = await readPartyMapSqlFile(file)
+      partyMapLookupByServer = {}
+      refreshPartyMapSqlStatus()
+      recalc()
+    } catch (error){
+      updatePartyMapSqlStatus(String(error?.message || "No se pudo leer el archivo map.sql."), "bad")
+    } finally {
+      ev.target.value = ""
+    }
+  })
+  $("btnClearPartyMapSql").addEventListener("click", () => {
+    $("partyMapSqlInput").value = ""
+    partyMapLookupByServer = {}
+    refreshPartyMapSqlStatus()
+    recalc()
+  })
+  $("btnAddPartyRow").addEventListener("click", addPartyPlanRow)
   $("copyWood").addEventListener("click", copyNpcValue)
   $("copyClay").addEventListener("click", copyNpcValue)
   $("copyIron").addEventListener("click", copyNpcValue)
@@ -1593,6 +3235,8 @@ async function init(){
   updateTroopSelectsForRace()
 
   rowsState = []
+  const status = $("statusLine")
+  if(status) status.textContent = ""
   renderRows()
   recalc()
 }
