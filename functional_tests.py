@@ -1812,10 +1812,11 @@ def test_npc_training_copy_distribution_table_uses_columns_and_village_order(dri
     )
 
     lines = result["copied"].splitlines()
-    columns = [re.split(r"\s{2,}", line.strip()) for line in lines[1:4]]
+    columns = [re.split(r"\s{2,}", line.strip()) for line in lines[2:5]]
     assert "Copiar Distribucion de tropas" in result["actionTexts"], "El boton original de copiar distribucion no debia desaparecer"
     assert "COPIAR DISTRIBUCION FORMATO TABLA" in result["actionTexts"], "Falto el boton nuevo para copiar en formato tabla"
     assert lines[0] == "[b]Distribucion de tropas - formato tabla[/b]", "El resumen tabulado debia arrancar con el titulo correcto"
+    assert lines[1] == "[code]" and lines[-1] == "[/code]", "El resumen tabulado debia proteger el espaciado con bloque code"
     assert columns[0] == ["ALDEA", "CUARTEL", "ESTABLO", "TALLER"], "El resumen tabulado no incluyo las columnas esperadas"
     assert columns[1] == ["Villa B", "Imperiano: 30 (x2: Imperiano: 15)", "-", "-"], "La primera fila tabulada no respeto el orden configurado ni el contenido de CUARTEL"
     assert columns[2] == ["Villa A", "-", "Equites: 40", "Ariete: 12"], "La segunda fila tabulada no distribuyo bien ESTABLO y TALLER"

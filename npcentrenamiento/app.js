@@ -2211,9 +2211,11 @@ function buildTrainingDistributionTableCopyText(plan){
 
   const lines = [
     "[b]Distribucion de tropas - formato tabla[/b]",
+    "[code]",
     formatRow(headers)
   ]
   for(const row of rows) lines.push(formatRow(row))
+  lines.push("[/code]")
 
   return lines.join("\n").trim()
 }
