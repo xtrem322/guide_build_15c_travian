@@ -1378,7 +1378,7 @@ def test_npc_training_ignores_great_buildings_and_hospital(driver, base_url):
     assert parsed_by_key["zi 001"]["sec"] == 0, "El tiempo actual no debia usar el gran cuartel cuando cuartel y establo estan vacios"
 
 
-def test_npc_training_without_header_still_matches_first_three_columns(driver, base_url):
+def test_npc_training_without_header_uses_last_four_columns(driver, base_url):
     driver.get(f"{base_url}/npcentrenamiento/")
     wait_for(driver, "#btnImportTraining")
 
@@ -1397,9 +1397,38 @@ def test_npc_training_without_header_still_matches_first_three_columns(driver, b
     parsed_by_key = {item["key"]: item for item in parsed}
 
     assert parsed_by_key["fh villa esperanza"]["name"] == "FH Villa Esperanza", "Sin cabecera completa, el nombre de la aldea no debia contaminarse con tiempos"
-    assert parsed_by_key["fh villa esperanza"]["queues"] == {"C": 2149, "E": 1334, "T": 24970, "G": 0}, "Sin cabecera completa, el parser debia usar las primeras tres columnas"
-    assert parsed_by_key["fh villa esperanza"]["sec"] == 28453, "El tiempo total debia salir de cuartel, establo y taller"
-    assert parsed_by_key["zi 001"]["sec"] == 0, "Sin cabecera completa, el parser no debia tomar el gran cuartel como cuartel"
+    assert parsed_by_key["fh villa esperanza"]["queues"] == {"C": 24970, "E": 23600, "T": 5357, "G": 0}, "Sin cabecera completa, el parser debia usar las ultimas cuatro columnas como base"
+    assert parsed_by_key["fh villa esperanza"]["sec"] == 53927, "El tiempo total debia salir de cuartel, establo y taller"
+    assert parsed_by_key["zi 001"]["queues"] == {"C": 0, "E": 1574, "T": 0, "G": 0}, "Sin cabecera completa, una sola columna extra inicial debia ignorarse"
+
+
+def test_npc_training_without_header_uses_last_four_values(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    parsed = driver.execute_script(
+        """
+        return parseTrainingTimesTable(arguments[0]).map(row => ({
+          name: row.name,
+          key: row.key,
+          sec: row.currentTrainingSec,
+          queues: row.currentTrainingByQueue
+        }));
+        """,
+        """Training
+Village
+Alpha 1:00:00 2:00:00 3:00:00 4:00:00
+Beta 0:10:00 1:00:00 2:00:00 3:00:00 4:00:00
+Gamma 0:05:00 0:10:00 1:00:00 2:00:00 3:00:00 4:00:00
+Population: 1
+"""
+    )
+
+    parsed_by_key = {item["key"]: item for item in parsed}
+
+    assert parsed_by_key["alpha"]["queues"] == {"C": 3600, "E": 7200, "T": 10800, "G": 0}, "Con 4 valores, el orden debia ser cuartel, establo, taller, hospital"
+    assert parsed_by_key["beta"]["queues"] == {"C": 3600, "E": 7200, "T": 10800, "G": 0}, "Con 5 valores, la primera columna debia ignorarse como gran edificio"
+    assert parsed_by_key["gamma"]["queues"] == {"C": 3600, "E": 7200, "T": 10800, "G": 0}, "Con 6 valores, las dos primeras columnas debian ignorarse como grandes edificios"
 
 
 def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
@@ -3911,7 +3940,8 @@ def main():
                 ("npc_training_detects_prefixed_central_and_market_controls", test_npc_training_detects_prefixed_central_and_market_controls),
                 ("npc_training_equalize_times_toggle_and_parser", test_npc_training_equalize_times_toggle_and_parser),
                 ("npc_training_ignores_great_buildings_and_hospital", test_npc_training_ignores_great_buildings_and_hospital),
-                ("npc_training_without_header_still_matches_first_three_columns", test_npc_training_without_header_still_matches_first_three_columns),
+                ("npc_training_without_header_uses_last_four_columns", test_npc_training_without_header_uses_last_four_columns),
+                ("npc_training_without_header_uses_last_four_values", test_npc_training_without_header_uses_last_four_values),
                 ("npc_training_equalizes_current_plus_new_time", test_npc_training_equalizes_current_plus_new_time),
                 ("npc_training_equalize_times_requires_training_block", test_npc_training_equalize_times_requires_training_block),
                 ("npc_training_equalize_times_matches_training_names_without_colon", test_npc_training_equalize_times_matches_training_names_without_colon),

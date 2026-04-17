@@ -534,10 +534,11 @@ function parseTrainingTimesRow(line, columns){
     }
     queueTimes = withTrainingQueueTimes(mapped)
   } else {
+    const baseTail = tail.length > 4 ? tail.slice(-4) : tail
     queueTimes = withTrainingQueueTimes({
-      C: tail[0],
-      E: tail[1],
-      T: tail[2],
+      C: baseTail[0],
+      E: baseTail[1],
+      T: baseTail[2],
       G: 0
     })
   }
