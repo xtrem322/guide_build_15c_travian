@@ -7,7 +7,6 @@
     { label: 'NPC Optimizador',     href: '../npc/'     },
     { label: 'NPC Entrenamiento',   href: '../npcentrenamiento/' },
     { label: 'Planificador de Ataques', href: '../planificadorataques/' },
-    { label: 'NPC Grandes Fiestas', href: '../npcgrandesfiestas/' },
     { label: 'Farm Oasis',          href: '../oasis/'   },
     { label: 'Lista de Vacas',      href: '../listadevacas/' },
     { label: 'Puntos Cultura',      href: '../cultura/' },
