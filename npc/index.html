@@ -202,6 +202,11 @@
         agrega las aldeas destino con <strong>+ Anadir fila</strong>. El calculo reparte apoyo entre aldeas igual que la herramienta de grandes fiestas y
         luego puede generar <strong>links de rutas comerciales</strong> como en NPC entrenamiento.
       </div>
+      <div class="training-note party-note">
+        Siglas compatibles: <strong>CE / CH / CR / CGA / CGE / CS</strong> para detectar la central y su raza, y
+        <strong>FE / FH / FR / FGA / FGE / FS</strong> para limitar las aldeas destino a las marcadas para fiestas.
+        Las aldeas <strong>ZI</strong> se excluyen automaticamente del selector de destino.
+      </div>
 
       <div class="training-import-grid">
         <div class="train-item train-item-wide">
@@ -243,52 +248,49 @@
         <div class="training-import-status" id="partyImportStatus">Sin datos importados.</div>
       </div>
 
-      <div class="training-central-grid">
+      <div class="training-summary" id="partySummary" style="display:none"></div>
+
+      <div class="training-central-grid party-primary-grid">
         <div class="train-item">
           <div class="tool-label">Aldea central</div>
           <select id="partyCentralVillage"></select>
         </div>
         <div class="train-item">
-          <div class="tool-label">Configuracion central</div>
-          <div class="training-central-tools">
-            <div class="tool">
-              <div class="tool-label">Fiestas central</div>
-              <select id="partyCentralCount">
-                <option value="0">0</option>
-                <option value="1" selected>1</option>
-                <option value="2">2</option>
-              </select>
-            </div>
-            <div class="tool">
-              <div class="tool-label">Raza central</div>
-              <select id="partyCentralRace"></select>
-            </div>
-            <label class="training-inline-check training-inline-check-boxed">
-              <input type="checkbox" id="partyTradeOfficeEnabled" checked>
-              <span>Oficina de comercio</span>
-            </label>
-            <div class="tool">
-              <div class="tool-label">Nivel mercado</div>
-              <select id="partyMarketplaceLevel"></select>
-            </div>
-            <div class="tool">
-              <div class="tool-label">Nivel oficina</div>
-              <select id="partyTradeOfficeLevel"></select>
-            </div>
+          <div class="tool-label">Aldea para anadir</div>
+          <div class="party-add-row-inline">
+            <select id="partyRowVillageSelect"></select>
+            <button class="btn btn-orange" id="btnAddPartyRow" type="button">+ Anadir fila</button>
           </div>
         </div>
         <div class="training-central-meta" id="partyCentralMeta"></div>
       </div>
 
-      <div class="training-actions">
+      <div class="party-config-grid">
         <div class="tool">
-          <div class="tool-label">Aldea para anadir</div>
-          <select id="partyRowVillageSelect"></select>
+          <div class="tool-label">Fiestas central</div>
+          <select id="partyCentralCount">
+            <option value="0">0</option>
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+          </select>
         </div>
-        <button class="btn btn-orange" id="btnAddPartyRow" type="button">+ Anadir fila</button>
+        <div class="tool">
+          <div class="tool-label">Raza central</div>
+          <select id="partyCentralRace"></select>
+        </div>
+        <label class="training-inline-check training-inline-check-boxed party-check">
+          <input type="checkbox" id="partyTradeOfficeEnabled" checked>
+          <span>Oficina de comercio</span>
+        </label>
+        <div class="tool">
+          <div class="tool-label">Nivel mercado</div>
+          <select id="partyMarketplaceLevel"></select>
+        </div>
+        <div class="tool">
+          <div class="tool-label">Nivel oficina</div>
+          <select id="partyTradeOfficeLevel"></select>
+        </div>
       </div>
-
-      <div class="training-summary" id="partySummary" style="display:none"></div>
 
       <div class="training-table-wrap" id="partySelectionWrap" style="display:none">
         <div class="training-table-scroll">

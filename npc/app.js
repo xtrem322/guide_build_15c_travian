@@ -49,6 +49,14 @@ const MERCHANT_BASE_STATS = {
   HUNOS: { capacity: 500, speed: 20 },
   EGIPTO: { capacity: 750, speed: 16 }
 }
+const PARTY_RACE_PREFIX = {
+  GA: "GALOS",
+  GE: "GERMANO",
+  R: "ROMANO",
+  E: "EGIPTO",
+  S: "ESPARTANO",
+  H: "HUNOS"
+}
 
 function showInitError(message){
   const status = $("statusLine")
@@ -159,7 +167,33 @@ function fillSelect(sel, items, keep){
 }
 
 function raceList(){
-  return ["HUNOS","ROMANO","GERMANO","GALOS","EGIPTO"]
+  return ["HUNOS","ROMANO","GERMANO","GALOS","EGIPTO","ESPARTANO"]
+}
+
+function parseVillagePartyTag(name){
+  const displayName = cleanVillageNameText(name)
+  const match = displayName.match(/^([FC])(?:\s*[:\-]\s*|\s*)(GA|GE|R|E|S|H)(?:\s*[:\-]\s*|\s+)(.+)$/i)
+  if(!match){
+    return {
+      displayName,
+      isPartyDestination: false,
+      isPartyCentral: false,
+      race: "",
+      sigla: ""
+    }
+  }
+
+  const mode = String(match[1] || "").toUpperCase()
+  const prefix = String(match[2] || "").toUpperCase()
+  const baseName = cleanVillageNameText(match[3] || "")
+  const race = PARTY_RACE_PREFIX[prefix] || ""
+  return {
+    displayName: baseName || displayName,
+    isPartyDestination: mode === "F" && Boolean(baseName),
+    isPartyCentral: mode === "C" && Boolean(baseName),
+    race,
+    sigla: `${mode}${prefix}`
+  }
 }
 
 function getTroopsByRaceAndTipo(race, tipo){
@@ -1329,7 +1363,8 @@ function defaultPartyImportedVillage(data, previous){
     did: 0
   }
 
-  const name = cleanVillageNameText(data.name)
+  const tag = parseVillagePartyTag(data.name)
+  const name = tag.displayName || cleanVillageNameText(data.name)
   return {
     ...base,
     name,
@@ -1344,7 +1379,11 @@ function defaultPartyImportedVillage(data, previous){
     x: Number.isFinite(Number(data.x)) ? Number(data.x) : base.x,
     y: Number.isFinite(Number(data.y)) ? Number(data.y) : base.y,
     did: Math.max(0, Math.floor(n0(data.did ?? base.did))),
-    isInitialZone: isInitialZoneVillageName(name)
+    isInitialZone: isInitialZoneVillageName(name),
+    isTaggedPartyCentral: Boolean(tag.isPartyCentral),
+    isTaggedPartyDestination: Boolean(tag.isPartyDestination),
+    taggedRace: tag.race || "",
+    taggedSigla: tag.sigla || ""
   }
 }
 
@@ -1353,8 +1392,9 @@ function getVillageTotalCapacity(village){
 }
 
 function findRecommendedPartyCentralKey(){
-  const best = partyImportedVillages
-    .filter(village => !village.isInitialZone)
+  const taggedCentrals = partyImportedVillages.filter(village => village.isTaggedPartyCentral && !village.isInitialZone)
+  const source = taggedCentrals.length ? taggedCentrals : partyImportedVillages.filter(village => !village.isInitialZone)
+  const best = source
     .slice()
     .sort((a, b) => {
       const byCurrent = n0(b.current?.total) - n0(a.current?.total)
@@ -1368,8 +1408,27 @@ function findRecommendedPartyCentralKey(){
 }
 
 function getPartyCentralCandidates(){
+  const taggedCentrals = partyImportedVillages.filter(village => village.isTaggedPartyCentral && !village.isInitialZone)
+  const source = taggedCentrals.length ? taggedCentrals : partyImportedVillages.filter(village => !village.isInitialZone)
+  return source
+    .slice()
+    .sort(compareVillageOrder)
+}
+
+function hasTaggedPartyDestinations(){
+  return partyImportedVillages.some(village => village.isTaggedPartyDestination && !village.isInitialZone)
+}
+
+function getPartyDestinationCandidates(){
+  const used = new Set(partyRowsState.map(row => row.villageKey))
   return partyImportedVillages
-    .filter(village => !village.isInitialZone)
+    .filter(village => {
+      if(village.key === partyCentralKey) return false
+      if(village.isInitialZone) return false
+      if(used.has(village.key)) return false
+      if(hasTaggedPartyDestinations()) return village.isTaggedPartyDestination
+      return true
+    })
     .slice()
     .sort(compareVillageOrder)
 }
@@ -1384,13 +1443,15 @@ function importPartyModeVillages(){
   const coordsByKey = parseVillageCoordinates($("partyCapacityInput").value)
   const prevByKey = new Map(partyImportedVillages.map(village => [village.key, village]))
   const resourceMap = new Map(resourceRows.map(row => [row.key, row]))
+  const resourceDisplayMap = new Map(resourceRows.map(row => [normalizeVillageKey(parseVillagePartyTag(row.name).displayName || row.name), row]))
   const resourceOrderMap = new Map(resourceRows.map((row, idx) => [row.key, idx]))
   const capacityOrderMap = new Map(capacityRows.map((row, idx) => [row.key, idx]))
   const merged = []
 
   for(const capacity of capacityRows){
-    const resource = resourceMap.get(capacity.key)
-    const coords = coordsByKey.get(capacity.key)
+    const capacityDisplayKey = normalizeVillageKey(parseVillagePartyTag(capacity.name).displayName || capacity.name)
+    const resource = resourceMap.get(capacity.key) || resourceDisplayMap.get(capacityDisplayKey)
+    const coords = coordsByKey.get(capacity.key) || coordsByKey.get(capacityDisplayKey)
     const sourceOrder = resourceOrderMap.has(capacity.key)
       ? resourceOrderMap.get(capacity.key)
       : resourceRows.length + n0(capacityOrderMap.get(capacity.key))
@@ -1411,7 +1472,13 @@ function importPartyModeVillages(){
   partyImportedVillages = merged
   partyRowsState = partyRowsState.filter(row => partyImportedVillages.some(village => village.key === row.villageKey))
 
-  if(!partyImportedVillages.some(village => village.key === partyCentralKey)){
+  const taggedCentral = merged.find(village => village.isTaggedPartyCentral && !village.isInitialZone)
+  if(taggedCentral){
+    partyCentralKey = taggedCentral.key
+    if(taggedCentral.taggedRace && raceList().includes(taggedCentral.taggedRace) && $("partyCentralRace")){
+      $("partyCentralRace").value = taggedCentral.taggedRace
+    }
+  } else if(!partyImportedVillages.some(village => village.key === partyCentralKey)){
     partyCentralKey = findRecommendedPartyCentralKey()
   }
   partyRowsState = partyRowsState.filter(row => row.villageKey !== partyCentralKey)
@@ -1497,7 +1564,7 @@ function renderPartyCentralMeta(){
       <div class="training-central-card training-central-card-main">
         <div class="training-central-card-label">Central elegida</div>
         <div class="training-central-card-value">${central.name}</div>
-        <div class="training-central-card-help">${central.key === recommendedKey ? "Recomendada por ser la que mas recursos tiene ahora." : "Desde aqui sale el NPC y las rutas comerciales."}</div>
+        <div class="training-central-card-help">${central.isTaggedPartyCentral ? `Detectada por sigla ${central.taggedSigla}${central.taggedRace ? ` · ${central.taggedRace}` : ""}.` : (central.key === recommendedKey ? "Recomendada por ser la que mas recursos tiene ahora." : "Desde aqui sale el NPC y las rutas comerciales.")}</div>
       </div>
       <div class="training-central-card">
         <div class="training-central-card-label">Reserva fiestas</div>
@@ -1528,16 +1595,16 @@ function updatePartyCentralSelect(){
   if(options.some(option => option.value === partyCentralKey)) select.value = partyCentralKey
   else select.value = options[0]?.value || ""
   partyCentralKey = select.value || ""
+  const central = getPartyVillageByKey(partyCentralKey)
+  if(central?.taggedRace && raceList().includes(central.taggedRace) && $("partyCentralRace")){
+    $("partyCentralRace").value = central.taggedRace
+  }
   renderPartyCentralMeta()
 }
 
 function updatePartyRowVillageOptions(){
   const select = $("partyRowVillageSelect")
-  const used = new Set(partyRowsState.map(row => row.villageKey))
-  const options = partyImportedVillages
-    .filter(village => village.key !== partyCentralKey && !used.has(village.key))
-    .slice()
-    .sort(compareVillageOrder)
+  const options = getPartyDestinationCandidates()
     .map(village => ({
       value: village.key,
       label: `${village.name} - Total ${fmtInt(village.current.total)}`
@@ -1573,7 +1640,13 @@ function renderPartySelectionTable(){
     villageSelect.className = "training-select"
     const usedByOthers = new Set(partyRowsState.filter(item => item.id !== row.id).map(item => item.villageKey))
     const options = partyImportedVillages
-      .filter(item => item.key !== partyCentralKey && !usedByOthers.has(item.key))
+      .filter(item => {
+        if(item.key === partyCentralKey) return false
+        if(item.isInitialZone) return false
+        if(usedByOthers.has(item.key)) return false
+        if(hasTaggedPartyDestinations()) return item.isTaggedPartyDestination
+        return true
+      })
       .slice()
       .sort(compareVillageOrder)
       .map(item => ({ value:item.key, label:item.name }))

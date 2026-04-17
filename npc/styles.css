@@ -405,12 +405,45 @@ select,input{
   font-weight:700;
 }
 
+.party-note{
+  margin-top:-4px;
+}
+
 .training-central-grid{
   display:grid;
   grid-template-columns: minmax(220px, 320px) minmax(220px, 320px) 1fr;
   gap:12px;
   align-items:end;
   margin-bottom:14px;
+}
+
+.party-primary-grid{
+  grid-template-columns: minmax(220px, 320px) minmax(320px, 460px) 1fr;
+}
+
+.party-add-row-inline{
+  display:flex;
+  gap:10px;
+  align-items:end;
+}
+
+.party-add-row-inline .btn{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+.party-config-grid{
+  display:grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap:12px;
+  align-items:end;
+  margin:0 0 14px;
+}
+
+.party-check{
+  align-self:end;
+  justify-content:center;
+  min-height:44px;
 }
 
 .training-central-tools{
@@ -1131,8 +1164,15 @@ tbody td.left{text-align:left}
   .training-result-meta{
     grid-template-columns: 1fr;
   }
+  .party-config-grid{
+    grid-template-columns: 1fr;
+  }
   .training-central-tools,
   .training-result-actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .party-add-row-inline{
     flex-direction:column;
     align-items:stretch;
   }

@@ -543,6 +543,43 @@ def test_npc_party_mode_generates_links_from_manual_map_sql(driver, base_url):
     assert did_cell == "32285", "La tabla de links del modo combinado no mostro el did correcto"
 
 
+def test_npc_party_mode_detects_siglas_for_central_and_destinations(driver, base_url):
+    driver.get(f"{base_url}/npc/")
+    wait_for(driver, "#excessMode")
+
+    capacity_party = with_training_prefixes(CAPACITY_EXAMPLE).replace("Villa Pokemon", "CE: Villa Pokemon")
+    resources_party = with_training_prefixes(RESOURCES_EXAMPLE).replace("Villa Pokemon", "CE: Villa Pokemon")
+
+    Select(driver.find_element(By.ID, "excessMode")).select_by_value("party")
+    wait_for(driver, "#btnImportPartyMode")
+
+    driver.execute_script(
+        "document.getElementById('partyCapacityInput').value = arguments[0];"
+        "document.getElementById('partyResourcesInput').value = arguments[1];",
+        capacity_party,
+        resources_party
+    )
+    driver.find_element(By.ID, "btnImportPartyMode").click()
+
+    WebDriverWait(driver, 10).until(
+        lambda d: "Cruce valido" in d.find_element(By.ID, "partyImportStatus").text
+    )
+
+    central_text = Select(driver.find_element(By.ID, "partyCentralVillage")).first_selected_option.text
+    central_race = Select(driver.find_element(By.ID, "partyCentralRace")).first_selected_option.get_attribute("value")
+    destination_options = [
+        option.text.strip()
+        for option in Select(driver.find_element(By.ID, "partyRowVillageSelect")).options
+    ]
+    meta_text = driver.find_element(By.ID, "partyCentralMeta").text
+
+    assert central_text.startswith("Villa Pokemon"), "El modo combinado no detecto la aldea central marcada por sigla"
+    assert central_race == "EGIPTO", "El modo combinado no tomo la raza central desde la sigla"
+    assert len(destination_options) == 4, "El modo combinado no limito los destinos a las aldeas marcadas con siglas de fiestas"
+    assert not any(option.startswith("ZI") or option.startswith("FO") for option in destination_options), "El modo combinado no excluyo ZI/aldeas sin sigla del selector de destinos"
+    assert "Detectada por sigla CE" in meta_text, "La interfaz no informo que la central fue detectada por sigla"
+
+
 def test_oasis(driver, base_url):
     driver.get(f"{base_url}/oasis/")
     wait_for(driver, "#btnProcess")
@@ -3711,6 +3748,7 @@ def main():
                 ("npc_party_mode_import_add_row_and_summary", test_npc_party_mode_import_add_row_and_summary),
                 ("npc_party_mode_result_delete_removes_row", test_npc_party_mode_result_delete_removes_row),
                 ("npc_party_mode_generates_links_from_manual_map_sql", test_npc_party_mode_generates_links_from_manual_map_sql),
+                ("npc_party_mode_detects_siglas_for_central_and_destinations", test_npc_party_mode_detects_siglas_for_central_and_destinations),
                 ("npc_training_capacity_parser", test_npc_training_capacity_parser),
                 ("npc_training_usage_guide", test_npc_training_usage_guide),
                 ("npc_training_capacity_import_without_resources", test_npc_training_capacity_import_without_resources),
