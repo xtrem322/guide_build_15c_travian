@@ -513,10 +513,9 @@ function parseTrainingTimesRow(line, columns){
   if(tokens.length < 2) return null
 
   const headerColumns = Array.isArray(columns) ? columns : []
-  const expectedTailCount = Math.max(4, headerColumns.length || 0)
   const tail = []
   let idx = tokens.length - 1
-  while(idx >= 0 && tail.length < expectedTailCount && isTrainingTimeToken(tokens[idx])){
+  while(idx >= 0 && isTrainingTimeToken(tokens[idx])){
     tail.unshift(tokens[idx])
     idx -= 1
   }

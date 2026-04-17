@@ -268,6 +268,56 @@ Loyalty: 100%
 Villages 15/17
 """
 
+TRAINING_TIMES_NO_HEADER_EXTRA_COLUMNS_EXAMPLE = """Privacy settings
+1
+1,471
+5,699
+160,000
+46,689
+33,444
+96,766
+160,000
+146,295
+9,334
+Switch to avatar for sitting
+Hero
+1
+Server time: 6:02:27 (UTC +01:00)
+Alliance banner
+SAQ 1
+Info box
+2x
+
+Village overview
+Overview
+Resources
+Culture points
+Troops
+Smithy
+Hospital
+Training
+Village
+ZI Villa Zero - - 4:47:34 • • -
+ZI 001 - - • 0:26:14 • -
+ZI 002 - - • • • -
+Villa Pokemon - - - - - -
+CE Villa Tormento - - - - - -
+FH Villa Esperanza 0:35:49 0:22:14 6:56:10 6:33:20 1:29:17 •
+FH Ojitos Rojos - - 4:17:47 4:49:37 • •
+Villa Denominathor - - • 2:21:53 - •
+Villa Intercepthor - - • 1:29:21 - •
+FE Villa Emoción - - 4:18:24 4:19:26 - -
+FE Villa Charizard - - 4:18:29 4:18:55 - -
+FE Siempre Fuertes - - 4:18:31 4:18:02 - -
+FGE Villa OnePiece - - 4:39:21 - - -
+FE Taberna Del Pony - - 4:30:21 • - -
+FE Villa Luffy - - 4:24:00 - - -
+Team_Tocabolus
+Population: 956
+Loyalty: 100%
+Villages 15/17
+"""
+
 MAP_SQL_EXAMPLE = """INSERT INTO `vdata` VALUES (32285,'CE Villa Tormento',84,-165,915,17,0,0,0,0,0,0,0,0,0,0);
 INSERT INTO `vdata` VALUES (32286,'FH Villa Esperanza',84,-166,915,17,0,0,0,0,0,0,0,0,0,0);
 INSERT INTO `vdata` VALUES (32287,'FGA Villa Emoción',84,-164,915,17,0,0,0,0,0,0,0,0,0,0);
@@ -1326,6 +1376,30 @@ def test_npc_training_ignores_great_buildings_and_hospital(driver, base_url):
     assert parsed_by_key["fh ojitos rojos"]["queues"] == {"C": 0, "E": 0, "T": 16871, "G": 0}, "El parser no debia interpretar gran cuartel como cuartel"
     assert parsed_by_key["fe villa emocion"]["queues"] == {"C": 0, "E": 0, "T": 16908, "G": 0}, "El parser debia conservar el taller aunque existan columnas extra"
     assert parsed_by_key["zi 001"]["sec"] == 0, "El tiempo actual no debia usar el gran cuartel cuando cuartel y establo estan vacios"
+
+
+def test_npc_training_without_header_still_matches_first_three_columns(driver, base_url):
+    driver.get(f"{base_url}/npcentrenamiento/")
+    wait_for(driver, "#btnImportTraining")
+
+    parsed = driver.execute_script(
+        """
+        return parseTrainingTimesTable(arguments[0]).map(row => ({
+          name: row.name,
+          key: row.key,
+          sec: row.currentTrainingSec,
+          queues: row.currentTrainingByQueue
+        }));
+        """,
+        TRAINING_TIMES_NO_HEADER_EXTRA_COLUMNS_EXAMPLE
+    )
+
+    parsed_by_key = {item["key"]: item for item in parsed}
+
+    assert parsed_by_key["fh villa esperanza"]["name"] == "FH Villa Esperanza", "Sin cabecera completa, el nombre de la aldea no debia contaminarse con tiempos"
+    assert parsed_by_key["fh villa esperanza"]["queues"] == {"C": 2149, "E": 1334, "T": 24970, "G": 0}, "Sin cabecera completa, el parser debia usar las primeras tres columnas"
+    assert parsed_by_key["fh villa esperanza"]["sec"] == 28453, "El tiempo total debia salir de cuartel, establo y taller"
+    assert parsed_by_key["zi 001"]["sec"] == 0, "Sin cabecera completa, el parser no debia tomar el gran cuartel como cuartel"
 
 
 def test_npc_training_equalizes_current_plus_new_time(driver, base_url):
@@ -3837,6 +3911,7 @@ def main():
                 ("npc_training_detects_prefixed_central_and_market_controls", test_npc_training_detects_prefixed_central_and_market_controls),
                 ("npc_training_equalize_times_toggle_and_parser", test_npc_training_equalize_times_toggle_and_parser),
                 ("npc_training_ignores_great_buildings_and_hospital", test_npc_training_ignores_great_buildings_and_hospital),
+                ("npc_training_without_header_still_matches_first_three_columns", test_npc_training_without_header_still_matches_first_three_columns),
                 ("npc_training_equalizes_current_plus_new_time", test_npc_training_equalizes_current_plus_new_time),
                 ("npc_training_equalize_times_requires_training_block", test_npc_training_equalize_times_requires_training_block),
                 ("npc_training_equalize_times_matches_training_names_without_colon", test_npc_training_equalize_times_matches_training_names_without_colon),
