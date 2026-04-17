@@ -467,7 +467,19 @@ function isTrainingTimeToken(token){
   return /^(\d+):(\d{2}):(\d{2})$/.test(String(token || "").trim()) || /^(?:-|\u2022)$/u.test(String(token || "").trim())
 }
 
-function findTrainingTimesStart(lines){
+function parseTrainingHeaderColumns(line){
+  const text = cleanTravianPaste(line).replace(/\s+/g, " ").trim()
+  if(!/^Village\b/i.test(text)) return []
+  const columns = []
+  const regex = /(Great Barracks|Great Stable|Great Workshop|Barracks|Stable|Workshop|Hospital)/gi
+  let match
+  while((match = regex.exec(text)) !== null){
+    columns.push(String(match[1] || "").toUpperCase())
+  }
+  return columns
+}
+
+function findTrainingTimesInfo(lines){
   let sawTraining = false
 
   for(let i = 0; i < lines.length; i++){
@@ -476,35 +488,60 @@ function findTrainingTimesStart(lines){
       sawTraining = true
       continue
     }
-    if(sawTraining && /^Village\b/i.test(line)) return i + 1
+    if(sawTraining && /^Village\b/i.test(line)){
+      return {
+        startIdx: i + 1,
+        columns: parseTrainingHeaderColumns(line)
+      }
+    }
   }
 
   for(let i = 0; i < lines.length; i++){
-    if(/^Village\b/i.test(lines[i])) return i + 1
+    if(/^Village\b/i.test(lines[i])){
+      return {
+        startIdx: i + 1,
+        columns: parseTrainingHeaderColumns(lines[i])
+      }
+    }
   }
 
-  return 0
+  return { startIdx: 0, columns: [] }
 }
 
-function parseTrainingTimesRow(line){
+function parseTrainingTimesRow(line, columns){
   const tokens = String(line || "").trim().split(/\s+/).filter(Boolean)
   if(tokens.length < 2) return null
 
+  const headerColumns = Array.isArray(columns) ? columns : []
+  const expectedTailCount = Math.max(4, headerColumns.length || 0)
   const tail = []
   let idx = tokens.length - 1
-  while(idx >= 0 && tail.length < 4 && isTrainingTimeToken(tokens[idx])){
+  while(idx >= 0 && tail.length < expectedTailCount && isTrainingTimeToken(tokens[idx])){
     tail.unshift(tokens[idx])
     idx -= 1
   }
 
   if(!tail.length) return null
 
-  const queueTimes = withTrainingQueueTimes({
-    C: tail[0],
-    E: tail[1],
-    T: tail[2],
-    G: tail[3]
-  })
+  let queueTimes
+  if(headerColumns.length){
+    const mapped = { C:0, E:0, T:0, G:0 }
+    for(let i = 0; i < headerColumns.length && i < tail.length; i++){
+      const column = headerColumns[i]
+      const value = tail[i]
+      if(column === "BARRACKS") mapped.C = value
+      else if(column === "STABLE") mapped.E = value
+      else if(column === "WORKSHOP") mapped.T = value
+    }
+    queueTimes = withTrainingQueueTimes(mapped)
+  } else {
+    queueTimes = withTrainingQueueTimes({
+      C: tail[0],
+      E: tail[1],
+      T: tail[2],
+      G: 0
+    })
+  }
 
   const name = cleanVillageNameText(tokens.slice(0, idx + 1).join(" "))
   if(!name || /^Village$/i.test(name) || /^Sum$/i.test(name)) return null
@@ -519,14 +556,14 @@ function parseTrainingTimesRow(line){
 
 function parseTrainingTimesTable(raw){
   const lines = pasteLines(raw)
-  const startIdx = findTrainingTimesStart(lines)
-  const scoped = lines.slice(startIdx)
+  const info = findTrainingTimesInfo(lines)
+  const scoped = lines.slice(info.startIdx)
   const rows = []
   const seen = new Set()
 
   for(const line of scoped){
     if(shouldStopTravianTable(line)) break
-    const row = parseTrainingTimesRow(line)
+    const row = parseTrainingTimesRow(line, info.columns)
     if(!row || seen.has(row.key)) continue
     seen.add(row.key)
     rows.push(row)
