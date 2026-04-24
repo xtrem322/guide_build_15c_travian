@@ -413,6 +413,10 @@ function getAttackCountMultiplier(){
   return Math.max(1, Math.floor(n0($("attackCountMultiplier")?.value || 1)))
 }
 
+function getAttackKind(){
+  return String($("attackKind")?.value || "REAL").toUpperCase() === "FAKE" ? "FAKE" : "REAL"
+}
+
 function getAttackServerHost(){
   return String($("attackServerHost")?.value || DEFAULT_ATTACK_SERVER_HOST).trim()
 }
@@ -458,6 +462,15 @@ function getSlowestTroopEntry(entries){
     if(item.speed === slowest.speed && item.name.localeCompare(slowest.name, "es") < 0) return item
     return slowest
   }, null)
+}
+
+function getSelectedSlowestTroopEntry(entries, selectedName){
+  const target = normalizeText(selectedName)
+  if(target){
+    const matched = entries.find(item => normalizeText(item.name) === target)
+    if(matched) return matched
+  }
+  return getSlowestTroopEntry(entries)
 }
 
 function parseDateTimeLocal(value){
@@ -527,7 +540,7 @@ function computeAttackRowView(attack, lookup){
   const targetInfo = getVillageInfoByCoords(lookup, coords.target.x, coords.target.y)
   const distance = getVillageDistance(coords.origin, coords.target)
   const troopEntries = getValidTroopEntries(attack)
-  const slowest = getSlowestTroopEntry(troopEntries)
+  const slowest = getSelectedSlowestTroopEntry(troopEntries, attack?.slowestTroopName)
   const travelSeconds = slowest ? getTravelSeconds(distance, slowest.speed, attack?.tournamentLevel) : 0
   const arrivalDate = parseDateTimeLocal(attack?.arrivalAt)
   const sendDate = arrivalDate ? addSeconds(arrivalDate, -travelSeconds) : null
@@ -691,6 +704,9 @@ function saveAttackEditorTroops(){
     const row = attackRows.find(item => item.id === attackEditorState.id)
     if(row){
       row.troops = cleaned
+      if(row.slowestTroopName && !getValidTroopEntries(row).some(item => normalizeText(item.name) === normalizeText(row.slowestTroopName))){
+        row.slowestTroopName = ""
+      }
       row.lastAlertKey = ""
       showStatus(`Tropas guardadas en la fila ${fmtInt(row.id)}.`, "ok")
     }
@@ -769,7 +785,7 @@ function getReminderBadge(view, row){
 function renderAttackRows(lookup){
   const body = $("attackRowsBody")
   if(!attackRows.length){
-    body.innerHTML = `<tr><td colspan="15" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
+    body.innerHTML = `<tr><td colspan="16" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
     return
   }
 
@@ -779,9 +795,13 @@ function renderAttackRows(lookup){
     const sendMs = view.sendDate?.getTime() || 0
     const reminderMs = view.reminderDate?.getTime() || 0
     const rowClasses = [
+      row.attackKind === "FAKE" ? "is-fake-attack" : "is-real-attack",
       now > sendMs && sendMs > 0 ? "is-overdue" : "",
       now >= reminderMs && now <= sendMs && reminderMs > 0 ? "is-alerting" : ""
     ].filter(Boolean).join(" ")
+    const slowestOptions = view.troopEntries.length
+      ? view.troopEntries.map((item) => `<option value="${escapeHtml(item.name)}" ${view.slowest?.name === item.name ? "selected" : ""}>${escapeHtml(item.name)} · ${fmtInt(item.speed)} c/h</option>`).join("")
+      : `<option value="">Sin tropas</option>`
     return `
       <tr class="${rowClasses}" data-attack-id="${fmtInt(row.id)}">
         <td>${fmtInt(row.id)}</td>
@@ -794,9 +814,12 @@ function renderAttackRows(lookup){
           <div class="attack-sub">${escapeHtml(toCoords(row.targetX, row.targetY))}</div>
         </td>
         <td>
-          <div class="attack-name">${escapeHtml(view.slowest ? view.slowest.name : "-")}</div>
+          <select class="attack-slowest-select" data-attack-id="${fmtInt(row.id)}" ${view.troopEntries.length ? "" : "disabled"}>
+            ${slowestOptions}
+          </select>
           <div class="attack-sub">${escapeHtml(view.slowest ? `${fmtInt(view.slowest.speed)} c/h` : "Sin tropas")}</div>
         </td>
+        <td><span class="attack-pill">${escapeHtml(row.attackKind === "FAKE" ? "FAKE" : "REAL")}</span></td>
         <td>${escapeHtml(view.distanceLabel)}</td>
         <td>${escapeHtml(view.travelSeconds ? fmtTime(view.travelSeconds) : "-")}</td>
         <td>${getReminderBadge(view, row)}</td>
@@ -839,6 +862,16 @@ function renderAttackRows(lookup){
       openAttackEditor("row", Math.floor(n0(button.getAttribute("data-attack-id"))))
     })
   })
+  body.querySelectorAll(".attack-slowest-select").forEach((select) => {
+    select.addEventListener("change", () => {
+      const row = attackRows.find(item => item.id === Math.floor(n0(select.getAttribute("data-attack-id"))))
+      if(!row) return
+      row.slowestTroopName = String(select.value || "").trim()
+      row.lastAlertKey = ""
+      renderAttackPlanner()
+      showStatus(`Tropa lenta actualizada en fila ${fmtInt(row.id)}.`, "ok")
+    })
+  })
   body.querySelectorAll(".attack-real-arrival-input").forEach((input) => {
     input.addEventListener("input", () => {
       const row = attackRows.find(item => item.id === Math.floor(n0(input.getAttribute("data-attack-id"))))
@@ -865,6 +898,7 @@ function renderAttackRows(lookup){
         tournamentLevel: row.tournamentLevel,
         arrivalAt: row.arrivalAt,
         arrivalAuto: false,
+        slowestTroopName: row.slowestTroopName || "",
         troops: cloneTroops(row.troops, row.race)
       }
       syncDraftToDom()
@@ -934,6 +968,8 @@ function serializeAttackForConfig(row){
     targetY: String(row?.targetY ?? ""),
     tournamentLevel: Math.max(0, Math.floor(n0(row?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(row?.attackCountMultiplier || getAttackCountMultiplier()))),
+    attackKind: String(row?.attackKind || getAttackKind()).toUpperCase() === "FAKE" ? "FAKE" : "REAL",
+    slowestTroopName: String(row?.slowestTroopName || ""),
     arrivalAtIso: arrivalDate ? arrivalDate.toISOString() : "",
     realArrivalAtIso: realArrivalDate ? realArrivalDate.toISOString() : "",
     troops: cloneTroops(row?.troops, row?.race)
@@ -950,7 +986,8 @@ function buildAttackConfigExport(){
       serverHost: getAttackServerHost(),
       reminderSeconds: getAttackReminderSeconds(),
       extraMinutes: getAttackExtraMinutes(),
-      attackCountMultiplier: getAttackCountMultiplier()
+      attackCountMultiplier: getAttackCountMultiplier(),
+      attackKind: getAttackKind()
     },
     draft: serializeAttackForConfig(attackDraft || createDefaultDraft("HUNOS")),
     attacks: attackRows.map(serializeAttackForConfig)
@@ -1021,6 +1058,8 @@ function hydrateAttackFromConfig(item, fallbackId){
     targetY: String(item?.targetY ?? ""),
     tournamentLevel: Math.max(0, Math.floor(n0(item?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(item?.attackCountMultiplier || getAttackCountMultiplier()))),
+    attackKind: String(item?.attackKind || getAttackKind()).toUpperCase() === "FAKE" ? "FAKE" : "REAL",
+    slowestTroopName: String(item?.slowestTroopName || ""),
     arrivalAt,
     realArrivalAt,
     troops: cloneTroops(item?.troops, race),
@@ -1038,6 +1077,7 @@ function applyAttackConfig(config){
     if(config.settings.reminderSeconds != null) $("attackReminderSeconds").value = fmtInt(config.settings.reminderSeconds)
     if(config.settings.extraMinutes != null) $("attackExtraMinutes").value = fmtInt(config.settings.extraMinutes)
     if(config.settings.attackCountMultiplier != null) $("attackCountMultiplier").value = String(Math.max(1, Math.floor(n0(config.settings.attackCountMultiplier))))
+    if(config.settings.attackKind != null) $("attackKind").value = String(config.settings.attackKind).toUpperCase() === "FAKE" ? "FAKE" : "REAL"
   }
 
   attackRows = config.attacks.map((item, idx) => hydrateAttackFromConfig(item, idx + 1))
@@ -1054,6 +1094,7 @@ function applyAttackConfig(config){
     arrivalAt: draft.arrivalAt,
     arrivalAuto: false,
     realArrivalAt: draft.realArrivalAt,
+    slowestTroopName: draft.slowestTroopName,
     troops: cloneTroops(draft.troops, draft.race)
   }
   syncDraftToDom()
@@ -1088,6 +1129,8 @@ function addDraftAttack(){
       targetY: attackDraft.targetY,
       tournamentLevel: Math.max(0, Math.floor(n0(attackDraft.tournamentLevel))),
       attackCountMultiplier: getAttackCountMultiplier(),
+      attackKind: getAttackKind(),
+      slowestTroopName: attackDraft.slowestTroopName || "",
       arrivalAt: attackDraft.arrivalAt,
       realArrivalAt: attackDraft.arrivalAt,
       troops: cloneTroops(attackDraft.troops, attackDraft.race),
@@ -1240,6 +1283,9 @@ function bindDraftEvents(){
     renderAttackPlanner()
   })
   $("attackCountMultiplier").addEventListener("change", () => {
+    renderAttackPlanner()
+  })
+  $("attackKind").addEventListener("change", () => {
     renderAttackPlanner()
   })
   $("attackRace").addEventListener("change", () => {

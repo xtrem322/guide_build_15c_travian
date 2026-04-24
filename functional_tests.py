@@ -3327,8 +3327,8 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
           done({
             rowCount: document.querySelectorAll('#attackRowsBody tr[data-attack-id]').length,
             rowText: row ? row.textContent : "",
-            travel: row ? row.querySelector('td:nth-child(6)')?.textContent.trim() : "",
-            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : "",
+            travel: row ? row.querySelector('td:nth-child(7)')?.textContent.trim() : "",
+            detail: row ? row.querySelector('td:nth-child(10)')?.textContent.trim() : "",
             link: row ? row.querySelector('a')?.href || "" : "",
             status: document.getElementById("statusLine").textContent.trim()
           });
@@ -3384,7 +3384,7 @@ def test_attack_planner_processes_reminders(driver, base_url):
         processAttackReminders();
 
         setTimeout(() => {
-          const badge = document.querySelector('#attackRowsBody tr td:nth-child(7)')?.textContent.trim() || "";
+          const badge = document.querySelector('#attackRowsBody tr td:nth-child(8)')?.textContent.trim() || "";
           done({
             beeped: window.__beeped,
             notification: window.__notif ? window.__notif.title : "",
@@ -3513,7 +3513,7 @@ def test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes(dr
             secondsAreZero: arrival.getSeconds() === 0,
             includesExtra: diffSeconds >= longestTravel + (7 * 60),
             alertReset: attackRows.every((row) => row.lastAlertKey === ""),
-            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : ""
+            detail: row ? row.querySelector('td:nth-child(10)')?.textContent.trim() : ""
           });
         }, 50);
         """
@@ -3591,8 +3591,8 @@ def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
             localArrival: row.arrivalAt,
             expectedLocalArrival: formatDateTimeLocal(new Date(exported.attacks[0].arrivalAtIso)),
             alertReset: row.lastAlertKey === "",
-            troopText: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(8)')?.textContent.trim() || "",
-            serverArrival: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(12)')?.textContent.trim() || "",
+            troopText: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(9)')?.textContent.trim() || "",
+            serverArrival: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(13)')?.textContent.trim() || "",
             link: view.attackLink || ""
           });
         }, 50);
@@ -3659,6 +3659,91 @@ def test_attack_planner_real_arrival_report_uses_editable_matrix_value(driver, b
     assert "25/04/2026 23:45:00" in result["report"], "El reporte no uso la hora de llegada real editable"
     assert result["realIso"], "La exportacion no guardo la hora de llegada real"
     assert "Hora de llegada real actualizada" in result["status"], "La interfaz no confirmo la edicion de hora real"
+
+
+def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+
+        const editor = document.querySelector(".attack-editor-card");
+        const table = document.querySelector(".attack-table-wrap");
+        const editorBeforeTable = Boolean(editor && table && (editor.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING));
+
+        attackRows = [
+          {
+            id: 1,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "40",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 1,
+            attackKind: "REAL",
+            arrivalAt: "2026-04-25T23:26",
+            realArrivalAt: "2026-04-25T23:26",
+            troops: [
+              { uid: "r1", name: "Catapulta", quantity: 1 },
+              { uid: "r2", name: "Mercenario", quantity: 50 }
+            ],
+            lastAlertKey: ""
+          },
+          {
+            id: 2,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "40",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 1,
+            attackKind: "FAKE",
+            arrivalAt: "2026-04-25T23:26",
+            realArrivalAt: "2026-04-25T23:26",
+            troops: [
+              { uid: "f1", name: "Mercenario", quantity: 1 }
+            ],
+            lastAlertKey: ""
+          }
+        ];
+        renderAttackRows({});
+
+        const realRow = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
+        const fakeRow = document.querySelector('#attackRowsBody tr[data-attack-id="2"]');
+        const beforeTravel = realRow.querySelector('td:nth-child(7)')?.textContent.trim() || "";
+        const slowestSelect = realRow.querySelector(".attack-slowest-select");
+        const options = Array.from(slowestSelect.options).map((option) => option.value);
+        slowestSelect.value = "Mercenario";
+        slowestSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        setTimeout(() => {
+          const updatedRow = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
+          done({
+            editorBeforeTable,
+            realClass: realRow.classList.contains("is-real-attack"),
+            fakeClass: fakeRow.classList.contains("is-fake-attack"),
+            beforeTravel,
+            afterTravel: updatedRow.querySelector('td:nth-child(7)')?.textContent.trim() || "",
+            selectedSlowest: attackRows[0].slowestTroopName,
+            options,
+            exportedKind: buildAttackConfigExport().attacks[1].attackKind
+          });
+        }, 80);
+        """
+    )
+
+    assert result["editorBeforeTable"], "El editor de tropas no quedo arriba de la matriz"
+    assert result["realClass"] and result["fakeClass"], "Las filas REAL/FAKE no recibieron sus clases de color"
+    assert "Catapulta" in result["options"] and "Mercenario" in result["options"], "Tropa lenta no se limita a las tropas escogidas"
+    assert result["beforeTravel"] == "06:40:00", "La tropa lenta calculada por defecto no uso la catapulta"
+    assert result["afterTravel"] == "03:20:00", "Editar tropa lenta no recalculo la duracion del viaje"
+    assert result["selectedSlowest"] == "Mercenario", "La matriz no guardo la tropa lenta editada"
+    assert result["exportedKind"] == "FAKE", "La exportacion no preservo el tipo REAL/FAKE"
 
 
 def test_npc_party_capacity_and_resources_import(driver, base_url):
@@ -4194,6 +4279,7 @@ def main():
                 ("attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes", test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes),
                 ("attack_planner_exports_and_imports_shared_config", test_attack_planner_exports_and_imports_shared_config),
                 ("attack_planner_real_arrival_report_uses_editable_matrix_value", test_attack_planner_real_arrival_report_uses_editable_matrix_value),
+                ("attack_planner_slowest_selector_and_real_fake_rows", test_attack_planner_slowest_selector_and_real_fake_rows),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),

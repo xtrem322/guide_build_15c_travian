@@ -100,7 +100,7 @@
   }
   .attack-table{
     width:100%;
-    min-width:1730px;
+    min-width:1850px;
     border-collapse:collapse;
   }
   .attack-table th,
@@ -240,6 +240,27 @@
   .attack-row-actions{
     min-width:150px;
   }
+  .attack-slowest-select{
+    min-width:150px;
+  }
+  .attack-table tbody tr.is-real-attack{
+    background:#7f1d1d;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-fake-attack{
+    background:#1e3a8a;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-real-attack .attack-sub,
+  .attack-table tbody tr.is-fake-attack .attack-sub{
+    color:rgba(255,255,255,.82);
+  }
+  .attack-table tbody tr.is-real-attack input,
+  .attack-table tbody tr.is-real-attack select,
+  .attack-table tbody tr.is-fake-attack input,
+  .attack-table tbody tr.is-fake-attack select{
+    color:var(--text);
+  }
   @media (max-width: 1180px){
     .attack-layout{
       grid-template-columns:1fr;
@@ -292,6 +313,13 @@
       <div class="tool">
         <div class="tool-label">Minutos extras</div>
         <input id="attackExtraMinutes" type="number" min="0" step="1" value="5">
+      </div>
+      <div class="tool">
+        <div class="tool-label">Tipo ataque</div>
+        <select id="attackKind">
+          <option value="REAL" selected>REAL</option>
+          <option value="FAKE">FAKE</option>
+        </select>
       </div>
       <div class="attack-toolbar-actions">
         <button class="btn" id="btnAttackNotifications" type="button">Activar notificaciones</button>
@@ -358,6 +386,17 @@
             <input id="attackConfigFile" type="file" accept=".json,application/json" hidden>
           </div>
 
+          <div class="attack-editor-card">
+            <h2 class="attack-editor-title">Editor de tropas</h2>
+            <div class="attack-editor-subtitle" id="attackEditorSubtitle">Borrador actual</div>
+            <datalist id="attackTroopOptions"></datalist>
+            <div class="attack-editor-list" id="attackEditorList"></div>
+            <div class="attack-editor-actions">
+              <button class="btn" id="btnAddEditorTroop" type="button">Agregar tropa</button>
+              <button class="btn btn-orange" id="btnSaveEditorTroops" type="button">Guardar tropas</button>
+            </div>
+          </div>
+
           <div class="attack-table-wrap">
             <div class="attack-table-scroll">
               <table class="attack-table">
@@ -367,6 +406,7 @@
                     <th>Origen</th>
                     <th>Destino</th>
                     <th>Tropa lenta</th>
+                    <th>Tipo</th>
                     <th>Distancia</th>
                     <th>Duracion viaje</th>
                     <th>Aviso</th>
@@ -385,19 +425,6 @@
             </div>
           </div>
         </div>
-
-        <aside class="attack-side">
-          <div class="attack-editor-card">
-            <h2 class="attack-editor-title">Editor de tropas</h2>
-            <div class="attack-editor-subtitle" id="attackEditorSubtitle">Borrador actual</div>
-            <datalist id="attackTroopOptions"></datalist>
-            <div class="attack-editor-list" id="attackEditorList"></div>
-            <div class="attack-editor-actions">
-              <button class="btn" id="btnAddEditorTroop" type="button">Agregar tropa</button>
-              <button class="btn btn-orange" id="btnSaveEditorTroops" type="button">Guardar tropas</button>
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
 
