@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id)
 
 const DEFAULT_ATTACK_SERVER_HOST = "eternos.x3.hispano.travian.com"
+const ATTACK_CONFIG_SCHEMA = "travian-attack-planner-config"
+const ATTACK_CONFIG_VERSION = 1
 const TRAVIAN_MAP_SIZE = 401
 const TOURNAMENT_FREE_TILES = 20
 const TOURNAMENT_BONUS_PER_LEVEL = 0.2
@@ -304,12 +306,16 @@ function refreshAttackMapSqlStatus(){
 }
 
 async function readMapSqlFile(file){
+  return readTextFile(file, "No se pudo leer el archivo map.sql.")
+}
+
+async function readTextFile(file, errorMessage){
   if(!file) return ""
   if(typeof file.text === "function") return file.text()
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ""))
-    reader.onerror = () => reject(new Error("No se pudo leer el archivo map.sql."))
+    reader.onerror = () => reject(new Error(errorMessage || "No se pudo leer el archivo."))
     reader.readAsText(file)
   })
 }
@@ -899,6 +905,127 @@ async function copyTextToClipboard(text){
   }
 }
 
+function serializeAttackForConfig(row){
+  const arrivalDate = parseDateTimeLocal(row?.arrivalAt)
+  return {
+    id: Math.max(0, Math.floor(n0(row?.id))),
+    race: String(row?.race || "HUNOS").toUpperCase(),
+    originX: String(row?.originX ?? ""),
+    originY: String(row?.originY ?? ""),
+    targetX: String(row?.targetX ?? ""),
+    targetY: String(row?.targetY ?? ""),
+    tournamentLevel: Math.max(0, Math.floor(n0(row?.tournamentLevel))),
+    attackCountMultiplier: Math.max(1, Math.floor(n0(row?.attackCountMultiplier || getAttackCountMultiplier()))),
+    arrivalAtIso: arrivalDate ? arrivalDate.toISOString() : "",
+    troops: cloneTroops(row?.troops, row?.race)
+  }
+}
+
+function buildAttackConfigExport(){
+  return {
+    schema: ATTACK_CONFIG_SCHEMA,
+    version: ATTACK_CONFIG_VERSION,
+    exportedAt: new Date().toISOString(),
+    settings: {
+      serverSpeed: String($("serverSpeed")?.value || "3"),
+      serverHost: getAttackServerHost(),
+      reminderSeconds: getAttackReminderSeconds(),
+      extraMinutes: getAttackExtraMinutes(),
+      attackCountMultiplier: getAttackCountMultiplier()
+    },
+    draft: serializeAttackForConfig(attackDraft || createDefaultDraft("HUNOS")),
+    attacks: attackRows.map(serializeAttackForConfig)
+  }
+}
+
+function downloadTextFile(filename, text, mimeType){
+  const blob = new Blob([String(text || "")], { type: mimeType || "text/plain" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function exportAttackConfig(){
+  if(!attackRows.length){
+    showStatus("No hay ataques para exportar.", "bad")
+    return
+  }
+  const config = buildAttackConfigExport()
+  const filename = `planificador-ataques-${new Date().toISOString().slice(0, 10)}.json`
+  downloadTextFile(filename, JSON.stringify(config, null, 2), "application/json")
+  showStatus(`Configuracion exportada: ${fmtInt(attackRows.length)} ataques.`, "ok")
+}
+
+function dateTimeLocalFromImportedIso(value){
+  const text = String(value || "").trim()
+  if(!text) return ""
+  const date = new Date(text)
+  if(Number.isNaN(date.getTime())) return ""
+  return formatDateTimeLocal(date)
+}
+
+function hydrateAttackFromConfig(item, fallbackId){
+  const race = String(item?.race || "HUNOS").toUpperCase()
+  const arrivalAt = dateTimeLocalFromImportedIso(item?.arrivalAtIso) || String(item?.arrivalAt || "").trim()
+  return {
+    id: Math.max(1, Math.floor(n0(item?.id || fallbackId))),
+    race,
+    originX: String(item?.originX ?? ""),
+    originY: String(item?.originY ?? ""),
+    targetX: String(item?.targetX ?? ""),
+    targetY: String(item?.targetY ?? ""),
+    tournamentLevel: Math.max(0, Math.floor(n0(item?.tournamentLevel))),
+    attackCountMultiplier: Math.max(1, Math.floor(n0(item?.attackCountMultiplier || getAttackCountMultiplier()))),
+    arrivalAt,
+    troops: cloneTroops(item?.troops, race),
+    lastAlertKey: ""
+  }
+}
+
+function applyAttackConfig(config){
+  if(!config || config.schema !== ATTACK_CONFIG_SCHEMA || !Array.isArray(config.attacks)){
+    throw new Error("El archivo no es una configuracion valida del planificador de ataques.")
+  }
+  if(config.settings){
+    if(config.settings.serverSpeed != null) $("serverSpeed").value = String(config.settings.serverSpeed)
+    if(config.settings.serverHost != null) $("attackServerHost").value = String(config.settings.serverHost)
+    if(config.settings.reminderSeconds != null) $("attackReminderSeconds").value = fmtInt(config.settings.reminderSeconds)
+    if(config.settings.extraMinutes != null) $("attackExtraMinutes").value = fmtInt(config.settings.extraMinutes)
+    if(config.settings.attackCountMultiplier != null) $("attackCountMultiplier").value = String(Math.max(1, Math.floor(n0(config.settings.attackCountMultiplier))))
+  }
+
+  attackRows = config.attacks.map((item, idx) => hydrateAttackFromConfig(item, idx + 1))
+  attackNextId = attackRows.reduce((max, row) => Math.max(max, row.id), 0) + 1
+  const draftSource = config.draft || attackRows[0] || createDefaultDraft("HUNOS")
+  const draft = hydrateAttackFromConfig(draftSource, 0)
+  attackDraft = {
+    race: draft.race,
+    originX: draft.originX,
+    originY: draft.originY,
+    targetX: draft.targetX,
+    targetY: draft.targetY,
+    tournamentLevel: draft.tournamentLevel,
+    arrivalAt: draft.arrivalAt,
+    arrivalAuto: false,
+    troops: cloneTroops(draft.troops, draft.race)
+  }
+  syncDraftToDom()
+  openAttackEditor("draft", null)
+  renderAttackPlanner()
+  showStatus(`Configuracion importada: ${fmtInt(attackRows.length)} ataques listos.`, "ok")
+}
+
+async function importAttackConfigFile(file){
+  const text = await readTextFile(file, "No se pudo leer la configuracion.")
+  const config = JSON.parse(text)
+  applyAttackConfig(config)
+}
+
 function validateDraftAttack(){
   syncDraftFromDom()
   if(attackDraft.originX === "" || attackDraft.originY === "") throw new Error("Define coordenadas de aldea origen.")
@@ -1128,6 +1255,20 @@ function bindDraftEvents(){
   })
   $("btnEditDraftTroops").addEventListener("click", () => {
     openAttackEditor("draft", null)
+  })
+  $("btnExportAttackConfig").addEventListener("click", () => {
+    exportAttackConfig()
+  })
+  $("attackConfigFile").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0]
+    if(!file) return
+    try {
+      await importAttackConfigFile(file)
+    } catch (error){
+      showStatus(String(error?.message || "No se pudo importar la configuracion."), "bad")
+    } finally {
+      event.target.value = ""
+    }
   })
   $("btnAddEditorTroop").addEventListener("click", () => {
     addEditorTroopLine()

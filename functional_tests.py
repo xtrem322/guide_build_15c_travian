@@ -3526,6 +3526,91 @@ def test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes(dr
     assert result["detail"] == "x8", "La columna de detalle de ataques no reflejo el multiplicador configurado"
 
 
+def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+        document.getElementById("serverSpeed").value = "3";
+        document.getElementById("attackServerHost").value = "server.example.test";
+        document.getElementById("attackReminderSeconds").value = "69";
+        document.getElementById("attackExtraMinutes").value = "11";
+        document.getElementById("attackCountMultiplier").value = "4";
+
+        const arrival = new Date(2026, 3, 25, 23, 26, 0);
+        const localArrival = formatDateTimeLocal(arrival);
+        attackRows = [{
+          id: 3,
+          race: "HUNOS",
+          originX: "84",
+          originY: "-166",
+          targetX: "25",
+          targetY: "-25",
+          tournamentLevel: 15,
+          attackCountMultiplier: 4,
+          arrivalAt: localArrival,
+          troops: [
+            { uid: "r1", name: "Catapulta", quantity: 1 },
+            { uid: "r2", name: "Mercenario", quantity: 1 }
+          ],
+          lastAlertKey: "already-alerted"
+        }];
+        attackDraft = {
+          race: "HUNOS",
+          originX: "84",
+          originY: "-166",
+          targetX: "25",
+          targetY: "-25",
+          tournamentLevel: 15,
+          arrivalAt: localArrival,
+          arrivalAuto: false,
+          troops: [{ uid: "d1", name: "Catapulta", quantity: 1 }]
+        };
+        syncDraftToDom();
+
+        const exported = buildAttackConfigExport();
+        attackRows = [];
+        attackDraft = createDefaultDraft("HUNOS");
+        syncDraftToDom();
+        applyAttackConfig(exported);
+
+        setTimeout(() => {
+          const row = attackRows[0];
+          const view = computeAttackRowView(row, {});
+          done({
+            schema: exported.schema,
+            iso: exported.attacks[0].arrivalAtIso,
+            expectedIso: arrival.toISOString(),
+            rowCount: attackRows.length,
+            reminder: document.getElementById("attackReminderSeconds").value,
+            extra: document.getElementById("attackExtraMinutes").value,
+            multiplier: row.attackCountMultiplier,
+            localArrival: row.arrivalAt,
+            expectedLocalArrival: formatDateTimeLocal(new Date(exported.attacks[0].arrivalAtIso)),
+            alertReset: row.lastAlertKey === "",
+            troopText: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(8)')?.textContent.trim() || "",
+            serverArrival: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(12)')?.textContent.trim() || "",
+            link: view.attackLink || ""
+          });
+        }, 50);
+        """
+    )
+
+    assert result["schema"] == "travian-attack-planner-config", "La exportacion no uso el schema esperado"
+    assert result["iso"] == result["expectedIso"], "La exportacion no guardo la llegada como instante ISO compartible"
+    assert result["rowCount"] == 1, "La importacion no reconstruyo la lista de ataques"
+    assert result["reminder"] == "69" and result["extra"] == "11", "La importacion no restauro los parametros del planificador"
+    assert result["multiplier"] == 4, "La importacion no restauro el detalle de cantidad de ataques"
+    assert result["localArrival"] == result["expectedLocalArrival"], "La importacion no recalculo la llegada local desde ISO con el navegador"
+    assert result["alertReset"], "La importacion debe limpiar avisos previos del archivo compartido"
+    assert "Catapulta: 1" in result["troopText"] and "Mercenario: 1" in result["troopText"], "La importacion no restauro las tropas"
+    assert "23:26:00" in result["serverArrival"], "La matriz no mostro la hora server de llegada importada"
+    assert "server.example.test" in result["link"], "La importacion no restauro el servidor para generar links"
+
+
 def test_npc_party_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
     wait_for(driver, "#btnImportParty")
@@ -4057,6 +4142,7 @@ def main():
                 ("attack_planner_processes_reminders", test_attack_planner_processes_reminders),
                 ("attack_planner_editor_updates_row_troops", test_attack_planner_editor_updates_row_troops),
                 ("attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes", test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes),
+                ("attack_planner_exports_and_imports_shared_config", test_attack_planner_exports_and_imports_shared_config),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),
