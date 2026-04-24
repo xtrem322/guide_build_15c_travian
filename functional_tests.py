@@ -3280,11 +3280,21 @@ def test_attack_planner_defaults(driver, base_url):
     subtitle = driver.find_element(By.ID, "attackEditorSubtitle").text
     empty_text = driver.find_element(By.ID, "attackRowsBody").text
     troop_tag = driver.find_element(By.CSS_SELECTOR, ".attack-editor-name").tag_name.lower()
+    attack_controls_in_new_attack = driver.execute_script(
+        """
+        const form = document.querySelector('.attack-form-grid');
+        const toolbar = document.querySelector('.toolbar');
+        const count = document.getElementById('attackCountMultiplier');
+        const kind = document.getElementById('attackKind');
+        return Boolean(form && count && kind && form.contains(count) && form.contains(kind) && !toolbar.contains(count) && !toolbar.contains(kind));
+        """
+    )
 
     assert speed == "3", "Planificador de Ataques no inicio con velocidad x3"
     assert reminder_seconds == "60", "Planificador de Ataques no inicio con recordatorio de 60 segundos"
     assert arrival_at == "", "La hora objetivo de llegada debe iniciar nula por defecto"
     assert troop_tag == "select", "El editor de tropas debe usar una lista desplegable"
+    assert attack_controls_in_new_attack, "Cantidad ataques y Tipo ataque deben estar dentro de Nuevo ataque"
     assert "Borrador actual" in subtitle, "El panel lateral no abrio el borrador por defecto"
     assert "Todavia no hay ataques" in empty_text, "La matriz inicial no mostro el estado vacio esperado"
 
