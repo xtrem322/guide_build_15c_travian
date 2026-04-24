@@ -244,16 +244,50 @@
     min-width:150px;
   }
   .attack-table tbody tr.is-real-attack{
-    background:#7f1d1d;
-    color:#fff;
+    background:#fff;
+    color:#7f1d1d;
+  }
+  .attack-table tbody tr.is-real-attack td{
+    background:#fff;
+    color:#7f1d1d;
   }
   .attack-table tbody tr.is-fake-attack{
-    background:#1e3a8a;
-    color:#fff;
+    background:#fff;
+    color:#1e3a8a;
+  }
+  .attack-table tbody tr.is-fake-attack td{
+    background:#fff;
+    color:#1e3a8a;
+  }
+  .attack-table tbody tr.is-real-attack:nth-child(even),
+  .attack-table tbody tr.is-fake-attack:nth-child(even){
+    background:#fff;
   }
   .attack-table tbody tr.is-real-attack .attack-sub,
   .attack-table tbody tr.is-fake-attack .attack-sub{
+    color:currentColor;
+    opacity:.78;
+  }
+  .attack-table tbody tr.is-real-attack.is-alerting{
+    background:#7f1d1d;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-real-attack.is-alerting td{
+    background:#7f1d1d;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-fake-attack.is-alerting{
+    background:#1e3a8a;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-fake-attack.is-alerting td{
+    background:#1e3a8a;
+    color:#fff;
+  }
+  .attack-table tbody tr.is-real-attack.is-alerting .attack-sub,
+  .attack-table tbody tr.is-fake-attack.is-alerting .attack-sub{
     color:rgba(255,255,255,.82);
+    opacity:1;
   }
   .attack-table tbody tr.is-real-attack input,
   .attack-table tbody tr.is-real-attack select,

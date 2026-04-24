@@ -3394,12 +3394,16 @@ def test_attack_planner_processes_reminders(driver, base_url):
         processAttackReminders();
 
         setTimeout(() => {
+          const row = document.querySelector('#attackRowsBody tr');
+          const rowStyle = getComputedStyle(row.querySelector("td"));
           const badge = document.querySelector('#attackRowsBody tr td:nth-child(8)')?.textContent.trim() || "";
           done({
             beeped: window.__beeped,
             notification: window.__notif ? window.__notif.title : "",
             alertKey: attackRows[0].lastAlertKey || "",
-            badge
+            badge,
+            rowBackground: rowStyle.backgroundColor,
+            rowColor: rowStyle.color
           });
         }, 20);
         """
@@ -3409,6 +3413,7 @@ def test_attack_planner_processes_reminders(driver, base_url):
     assert result["notification"] == "Ataque por enviar", "El recordatorio no disparo la notificacion esperada"
     assert result["alertKey"], "El recordatorio no marco la fila como ya avisada"
     assert result["badge"] == "69", "La matriz no mostro los segundos de aviso configurados tras procesar el recordatorio"
+    assert "127, 29, 29" in result["rowBackground"] and "255, 255, 255" in result["rowColor"], "Cuando el aviso llega a cero la fila REAL debe recuperar fondo rojo oscuro y texto blanco"
 
 
 def test_attack_planner_editor_updates_row_troops(driver, base_url):
@@ -3679,6 +3684,7 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
         """
         const done = arguments[arguments.length - 1];
         window.clearInterval(attackReminderLoopId);
+        const futureArrival = formatDateTimeLocal(addSeconds(new Date(), 86400));
 
         const editor = document.querySelector(".attack-editor-card");
         const mapSql = document.getElementById("attackMapSqlInput");
@@ -3697,8 +3703,8 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             tournamentLevel: 0,
             attackCountMultiplier: 1,
             attackKind: "REAL",
-            arrivalAt: "2026-04-25T23:26",
-            realArrivalAt: "2026-04-25T23:26",
+            arrivalAt: futureArrival,
+            realArrivalAt: futureArrival,
             troops: [
               { uid: "r1", name: "Catapulta", quantity: 1 },
               { uid: "r2", name: "Mercenario", quantity: 50 }
@@ -3715,8 +3721,8 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             tournamentLevel: 0,
             attackCountMultiplier: 1,
             attackKind: "FAKE",
-            arrivalAt: "2026-04-25T23:26",
-            realArrivalAt: "2026-04-25T23:26",
+            arrivalAt: futureArrival,
+            realArrivalAt: futureArrival,
             troops: [
               { uid: "f1", name: "Mercenario", quantity: 1 }
             ],
@@ -3727,6 +3733,12 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
 
         const realRow = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
         const fakeRow = document.querySelector('#attackRowsBody tr[data-attack-id="2"]');
+        const realStyle = getComputedStyle(realRow.querySelector("td"));
+        const fakeStyle = getComputedStyle(fakeRow.querySelector("td"));
+        const realColor = realStyle.color;
+        const realBackground = realStyle.backgroundColor;
+        const fakeColor = fakeStyle.color;
+        const fakeBackground = fakeStyle.backgroundColor;
         const beforeTravel = realRow.querySelector('td:nth-child(7)')?.textContent.trim() || "";
         const slowestSelect = realRow.querySelector(".attack-slowest-select");
         const options = Array.from(slowestSelect.options).map((option) => option.value);
@@ -3740,6 +3752,10 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             editorBeforeMapSql,
             realClass: realRow.classList.contains("is-real-attack"),
             fakeClass: fakeRow.classList.contains("is-fake-attack"),
+            realColor,
+            realBackground,
+            fakeColor,
+            fakeBackground,
             beforeTravel,
             afterTravel: updatedRow.querySelector('td:nth-child(7)')?.textContent.trim() || "",
             selectedSlowest: attackRows[0].slowestTroopName,
@@ -3753,6 +3769,8 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
     assert result["editorBeforeTable"], "El editor de tropas no quedo arriba de la matriz"
     assert result["editorBeforeMapSql"], "El editor de tropas debe quedar justo despues de Nuevo ataque, antes de map.sql"
     assert result["realClass"] and result["fakeClass"], "Las filas REAL/FAKE no recibieron sus clases de color"
+    assert "127, 29, 29" in result["realColor"] and "255, 255, 255" in result["realBackground"], f"REAL debe usar fondo blanco y texto rojo oscuro antes del aviso: {result['realColor']} / {result['realBackground']}"
+    assert "30, 58, 138" in result["fakeColor"] and "255, 255, 255" in result["fakeBackground"], f"FAKE debe usar fondo blanco y texto azul oscuro antes del aviso: {result['fakeColor']} / {result['fakeBackground']}"
     assert "Catapulta" in result["options"] and "Mercenario" in result["options"], "Tropa lenta no se limita a las tropas escogidas"
     assert result["beforeTravel"] == "06:40:00", "La tropa lenta calculada por defecto no uso la catapulta"
     assert result["afterTravel"] == "03:20:00", "Editar tropa lenta no recalculo la duracion del viaje"
