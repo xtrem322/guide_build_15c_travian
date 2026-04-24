@@ -3280,6 +3280,11 @@ def test_attack_planner_defaults(driver, base_url):
     subtitle = driver.find_element(By.ID, "attackEditorSubtitle").text
     empty_text = driver.find_element(By.ID, "attackRowsBody").text
     troop_tag = driver.find_element(By.CSS_SELECTOR, ".attack-editor-name").tag_name.lower()
+    troop_qty_count = len(driver.find_elements(By.CSS_SELECTOR, ".attack-editor-qty"))
+    table_headers = [
+        item.text.strip()
+        for item in driver.find_elements(By.CSS_SELECTOR, ".attack-table thead th")
+    ]
     attack_controls_in_new_attack = driver.execute_script(
         """
         const form = document.querySelector('.attack-form-grid');
@@ -3294,6 +3299,10 @@ def test_attack_planner_defaults(driver, base_url):
     assert reminder_seconds == "60", "Planificador de Ataques no inicio con recordatorio de 60 segundos"
     assert arrival_at == "", "La hora objetivo de llegada debe iniciar nula por defecto"
     assert troop_tag == "select", "El editor de tropas debe usar una lista desplegable"
+    assert troop_qty_count == 0, "El selector de tropas no debe mostrar columna Cantidad"
+    normalized_headers = [item.lower() for item in table_headers]
+    assert "tropas" not in normalized_headers, "La matriz no debe mostrar la columna Tropas"
+    assert "tropa lenta" in normalized_headers, "La matriz debe conservar Tropa lenta como texto calculado"
     assert attack_controls_in_new_attack, "Cantidad ataques y Tipo ataque deben estar dentro de Nuevo ataque"
     assert "Borrador actual" in subtitle, "El panel lateral no abrio el borrador por defecto"
     assert "Todavia no hay ataques" in empty_text, "La matriz inicial no mostro el estado vacio esperado"
@@ -3325,8 +3334,8 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
         document.getElementById("attackTournamentLevel").value = "10";
 
         attackDraft.troops = [
-          { uid: "t1", name: "Mercenario", quantity: 100 },
-          { uid: "t2", name: "Ariete", quantity: 2 }
+          { uid: "t1", name: "Mercenario" },
+          { uid: "t2", name: "Ariete" }
         ];
         openAttackEditor("draft", null);
         applySuggestedArrivalToDraft();
@@ -3338,7 +3347,7 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
             rowCount: document.querySelectorAll('#attackRowsBody tr[data-attack-id]').length,
             rowText: row ? row.textContent : "",
             travel: row ? row.querySelector('td:nth-child(7)')?.textContent.trim() : "",
-            detail: row ? row.querySelector('td:nth-child(10)')?.textContent.trim() : "",
+            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : "",
             link: row ? row.querySelector('a')?.href || "" : "",
             status: document.getElementById("statusLine").textContent.trim()
           });
@@ -3352,7 +3361,7 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
     assert result["travel"] == "03:20:00", "El viaje no aplico correctamente la plaza de torneos mas alla de 20 casillas"
     assert result["detail"] == "x1", "La fila no mostro el detalle de cantidad de ataques configurado"
     assert "eventType=3" in result["link"], "El link de ataque no fijo eventType=3"
-    assert "troop%5Bt1%5D=100" in result["link"] and "troop%5Bt7%5D=2" in result["link"], "El link de ataque no incluyo las tropas correctas"
+    assert "troop%5Bt1%5D=1" in result["link"] and "troop%5Bt7%5D=1" in result["link"], "El link de ataque no incluyo los tipos de tropas correctos"
     assert "agregada al planificador" in result["status"], "La interfaz no confirmo el alta de la fila"
 
 
@@ -3439,11 +3448,8 @@ def test_attack_planner_editor_updates_row_troops(driver, base_url):
         openAttackEditor("row", 1);
 
         const nameInput = document.querySelector(".attack-editor-name");
-        const qtyInput = document.querySelector(".attack-editor-qty");
         nameInput.value = "Ariete";
         nameInput.dispatchEvent(new Event("input", { bubbles: true }));
-        qtyInput.value = "3";
-        qtyInput.dispatchEvent(new Event("input", { bubbles: true }));
         saveAttackEditorTroops();
 
         setTimeout(() => {
@@ -3451,7 +3457,7 @@ def test_attack_planner_editor_updates_row_troops(driver, base_url):
           const view = computeAttackRowView(row, {});
           done({
             troopName: row && row.troops[0] ? row.troops[0].name : "",
-            troopQty: row && row.troops[0] ? row.troops[0].quantity : 0,
+            qtyInputs: document.querySelectorAll(".attack-editor-qty").length,
             link: view.attackLink || "",
             status: document.getElementById("statusLine").textContent.trim()
           });
@@ -3459,8 +3465,8 @@ def test_attack_planner_editor_updates_row_troops(driver, base_url):
         """
     )
 
-    assert result["troopName"] == "Ariete" and result["troopQty"] == 3, "Guardar desde el panel lateral no actualizo las tropas de la fila"
-    assert "troop%5Bt7%5D=3" in result["link"], "Guardar desde el panel lateral no actualizo el link con la nueva tropa"
+    assert result["troopName"] == "Ariete" and result["qtyInputs"] == 0, "Guardar desde el panel lateral no actualizo el tipo de tropa sin campo cantidad"
+    assert "troop%5Bt7%5D=1" in result["link"], "Guardar desde el panel lateral no actualizo el link con la nueva tropa"
     assert "Tropas guardadas en la fila 1" in result["status"], "La interfaz no confirmo el guardado desde el panel lateral"
 
 
@@ -3528,7 +3534,7 @@ def test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes(dr
             secondsAreZero: arrival.getSeconds() === 0,
             includesExtra: diffSeconds >= longestTravel + (7 * 60),
             alertReset: attackRows.every((row) => row.lastAlertKey === ""),
-            detail: row ? row.querySelector('td:nth-child(10)')?.textContent.trim() : ""
+            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : ""
           });
         }, 50);
         """
@@ -3606,8 +3612,9 @@ def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
             localArrival: row.arrivalAt,
             expectedLocalArrival: formatDateTimeLocal(new Date(exported.attacks[0].arrivalAtIso)),
             alertReset: row.lastAlertKey === "",
-            troopText: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(9)')?.textContent.trim() || "",
-            serverArrival: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(13)')?.textContent.trim() || "",
+            troopNames: row.troops.map((troop) => troop.name),
+            troopColumnCount: document.querySelector('#attackRowsBody tr[data-attack-id="3"]')?.querySelectorAll("td").length || 0,
+            serverArrival: document.querySelector('#attackRowsBody tr[data-attack-id="3"] td:nth-child(12)')?.textContent.trim() || "",
             link: view.attackLink || ""
           });
         }, 50);
@@ -3621,7 +3628,7 @@ def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
     assert result["multiplier"] == 4, "La importacion no restauro el detalle de cantidad de ataques"
     assert result["localArrival"] == result["expectedLocalArrival"], "La importacion no recalculo la llegada local desde ISO con el navegador"
     assert result["alertReset"], "La importacion debe limpiar avisos previos del archivo compartido"
-    assert "Catapulta: 1" in result["troopText"] and "Mercenario: 1" in result["troopText"], "La importacion no restauro las tropas"
+    assert result["troopNames"] == ["Catapulta", "Mercenario"] and result["troopColumnCount"] == 15, "La importacion no restauro los tipos de tropa en la matriz simplificada"
     assert "05:26:00" in result["serverArrival"], "La matriz no mostro la hora server de llegada importada con +6 horas"
     assert "server.example.test" in result["link"], "La importacion no restauro el servidor para generar links"
 
@@ -3676,7 +3683,7 @@ def test_attack_planner_real_arrival_report_uses_editable_matrix_value(driver, b
     assert "Hora de llegada real actualizada" in result["status"], "La interfaz no confirmo la edicion de hora real"
 
 
-def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
+def test_attack_planner_calculated_slowest_troop_and_real_fake_rows(driver, base_url):
     driver.get(f"{base_url}/planificadorataques/")
     wait_for(driver, "#btnAddAttackRow")
 
@@ -3706,8 +3713,8 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             arrivalAt: futureArrival,
             realArrivalAt: futureArrival,
             troops: [
-              { uid: "r1", name: "Catapulta", quantity: 1 },
-              { uid: "r2", name: "Mercenario", quantity: 50 }
+              { uid: "r1", name: "Catapulta" },
+              { uid: "r2", name: "Mercenario" }
             ],
             lastAlertKey: ""
           },
@@ -3724,7 +3731,7 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             arrivalAt: futureArrival,
             realArrivalAt: futureArrival,
             troops: [
-              { uid: "f1", name: "Mercenario", quantity: 1 }
+              { uid: "f1", name: "Mercenario" }
             ],
             lastAlertKey: ""
           }
@@ -3739,11 +3746,9 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
         const realBackground = realStyle.backgroundColor;
         const fakeColor = fakeStyle.color;
         const fakeBackground = fakeStyle.backgroundColor;
+        const slowestText = realRow.querySelector('td:nth-child(4)')?.textContent.trim() || "";
         const beforeTravel = realRow.querySelector('td:nth-child(7)')?.textContent.trim() || "";
-        const slowestSelect = realRow.querySelector(".attack-slowest-select");
-        const options = Array.from(slowestSelect.options).map((option) => option.value);
-        slowestSelect.value = "Mercenario";
-        slowestSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const slowestSelectCount = document.querySelectorAll(".attack-slowest-select").length;
 
         setTimeout(() => {
           const updatedRow = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
@@ -3756,10 +3761,10 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
             realBackground,
             fakeColor,
             fakeBackground,
+            slowestText,
             beforeTravel,
             afterTravel: updatedRow.querySelector('td:nth-child(7)')?.textContent.trim() || "",
-            selectedSlowest: attackRows[0].slowestTroopName,
-            options,
+            slowestSelectCount,
             exportedKind: buildAttackConfigExport().attacks[1].attackKind
           });
         }, 80);
@@ -3771,10 +3776,10 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
     assert result["realClass"] and result["fakeClass"], "Las filas REAL/FAKE no recibieron sus clases de color"
     assert "127, 29, 29" in result["realColor"] and "255, 255, 255" in result["realBackground"], f"REAL debe usar fondo blanco y texto rojo oscuro antes del aviso: {result['realColor']} / {result['realBackground']}"
     assert "30, 58, 138" in result["fakeColor"] and "255, 255, 255" in result["fakeBackground"], f"FAKE debe usar fondo blanco y texto azul oscuro antes del aviso: {result['fakeColor']} / {result['fakeBackground']}"
-    assert "Catapulta" in result["options"] and "Mercenario" in result["options"], "Tropa lenta no se limita a las tropas escogidas"
+    assert result["slowestSelectCount"] == 0, "La matriz no debe mostrar selector editable para Tropa lenta"
+    assert "Catapulta" in result["slowestText"] and "3 c/h" in result["slowestText"], "La matriz debe mostrar Tropa lenta como texto calculado"
     assert result["beforeTravel"] == "06:40:00", "La tropa lenta calculada por defecto no uso la catapulta"
-    assert result["afterTravel"] == "03:20:00", "Editar tropa lenta no recalculo la duracion del viaje"
-    assert result["selectedSlowest"] == "Mercenario", "La matriz no guardo la tropa lenta editada"
+    assert result["afterTravel"] == "06:40:00", "La duracion del viaje debe mantenerse calculada por la tropa mas lenta"
     assert result["exportedKind"] == "FAKE", "La exportacion no preservo el tipo REAL/FAKE"
 
 
@@ -3815,9 +3820,9 @@ def test_attack_planner_orders_rows_by_distance_and_offsets_server_time(driver, 
         done({
           firstOrder,
           secondOrder,
-          localSend: row4.querySelector("td:nth-child(11)")?.textContent.trim() || "",
-          serverSend: row4.querySelector("td:nth-child(12)")?.textContent.trim() || "",
-          serverArrival: row4.querySelector("td:nth-child(13)")?.textContent.trim() || ""
+          localSend: row4.querySelector("td:nth-child(10)")?.textContent.trim() || "",
+          serverSend: row4.querySelector("td:nth-child(11)")?.textContent.trim() || "",
+          serverArrival: row4.querySelector("td:nth-child(12)")?.textContent.trim() || ""
         });
         """
     )
@@ -3878,7 +3883,7 @@ def test_attack_planner_global_server_arrival_sets_all_rows(driver, base_url):
         globalInput.dispatchEvent(new Event("change", { bubbles: true }));
 
         setTimeout(() => {
-          const serverArrivals = Array.from(document.querySelectorAll("#attackRowsBody tr[data-attack-id] td:nth-child(13)")).map((cell) => cell.textContent.trim());
+          const serverArrivals = Array.from(document.querySelectorAll("#attackRowsBody tr[data-attack-id] td:nth-child(12)")).map((cell) => cell.textContent.trim());
           done({
             actionContainsGlobalInput: document.querySelector(".attack-actions").contains(globalInput),
             rowArrivalValues: attackRows.map((row) => row.arrivalAt),
@@ -4433,7 +4438,7 @@ def main():
                 ("attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes", test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes),
                 ("attack_planner_exports_and_imports_shared_config", test_attack_planner_exports_and_imports_shared_config),
                 ("attack_planner_real_arrival_report_uses_editable_matrix_value", test_attack_planner_real_arrival_report_uses_editable_matrix_value),
-                ("attack_planner_slowest_selector_and_real_fake_rows", test_attack_planner_slowest_selector_and_real_fake_rows),
+                ("attack_planner_calculated_slowest_troop_and_real_fake_rows", test_attack_planner_calculated_slowest_troop_and_real_fake_rows),
                 ("attack_planner_orders_rows_by_distance_and_offsets_server_time", test_attack_planner_orders_rows_by_distance_and_offsets_server_time),
                 ("attack_planner_global_server_arrival_sets_all_rows", test_attack_planner_global_server_arrival_sets_all_rows),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),

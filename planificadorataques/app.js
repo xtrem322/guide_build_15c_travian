@@ -185,8 +185,7 @@ function getDefaultTroopNameForRace(race){
 function createTroopLine(race){
   return {
     uid: `line-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-    name: getDefaultTroopNameForRace(race),
-    quantity: 1
+    name: getDefaultTroopNameForRace(race)
   }
 }
 
@@ -209,8 +208,7 @@ function cloneTroops(lines, race){
   const safeRace = String(race || "HUNOS").toUpperCase()
   const copy = (Array.isArray(lines) ? lines : []).map((item) => ({
     uid: item?.uid || `line-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-    name: String(item?.name || getDefaultTroopNameForRace(safeRace)),
-    quantity: Math.max(0, Math.floor(n0(item?.quantity)))
+    name: String(item?.name || getDefaultTroopNameForRace(safeRace))
   }))
   return copy.length ? copy : [createTroopLine(safeRace)]
 }
@@ -443,11 +441,10 @@ function getValidTroopEntries(attack){
   const result = []
   for(const troop of Array.isArray(attack?.troops) ? attack.troops : []){
     const meta = getTroopByName(attack?.race, troop?.name)
-    const quantity = Math.max(0, Math.floor(n0(troop?.quantity)))
-    if(!meta || quantity <= 0) continue
+    if(!meta) continue
     result.push({
       name: meta.name,
-      quantity,
+      quantity: 1,
       speed: meta.speed,
       token: meta.token
     })
@@ -463,15 +460,6 @@ function getSlowestTroopEntry(entries){
     if(item.speed === slowest.speed && item.name.localeCompare(slowest.name, "es") < 0) return item
     return slowest
   }, null)
-}
-
-function getSelectedSlowestTroopEntry(entries, selectedName){
-  const target = normalizeText(selectedName)
-  if(target){
-    const matched = entries.find(item => normalizeText(item.name) === target)
-    if(matched) return matched
-  }
-  return getSlowestTroopEntry(entries)
 }
 
 function parseDateTimeLocal(value){
@@ -532,7 +520,7 @@ function buildAttackLink(attack, troopEntries){
 
 function summarizeTroops(entries){
   if(!entries.length) return "Sin tropas configuradas."
-  return entries.map(item => `${item.name}: ${fmtInt(item.quantity)}`).join(" · ")
+  return entries.map(item => item.name).join(" · ")
 }
 
 function computeAttackRowView(attack, lookup){
@@ -541,7 +529,7 @@ function computeAttackRowView(attack, lookup){
   const targetInfo = getVillageInfoByCoords(lookup, coords.target.x, coords.target.y)
   const distance = getVillageDistance(coords.origin, coords.target)
   const troopEntries = getValidTroopEntries(attack)
-  const slowest = getSelectedSlowestTroopEntry(troopEntries, attack?.slowestTroopName)
+  const slowest = getSlowestTroopEntry(troopEntries)
   const travelSeconds = slowest ? getTravelSeconds(distance, slowest.speed, attack?.tournamentLevel) : 0
   const arrivalDate = parseDateTimeLocal(attack?.arrivalAt)
   const sendDate = arrivalDate ? addSeconds(arrivalDate, -travelSeconds) : null
@@ -665,10 +653,6 @@ function renderAttackEditor(){
           ${getTroopsByRace(attackEditorState.race).map((option) => `<option value="${escapeHtml(option.name)}" ${option.name === troop.name ? "selected" : ""}>${escapeHtml(option.name)}</option>`).join("")}
         </select>
       </div>
-      <div class="tool">
-        <div class="tool-label">Cantidad</div>
-        <input type="number" min="0" step="1" class="attack-editor-qty" data-line-id="${escapeHtml(troop.uid)}" value="${fmtInt(troop.quantity)}">
-      </div>
       <button class="btn btn-small attack-editor-delete" type="button" data-line-id="${escapeHtml(troop.uid)}">X</button>
     `
     list.appendChild(row)
@@ -682,13 +666,6 @@ function renderAttackEditor(){
     }
     input.addEventListener("input", updateName)
     input.addEventListener("change", updateName)
-  })
-  list.querySelectorAll(".attack-editor-qty").forEach((input) => {
-    input.addEventListener("input", () => {
-      const line = attackEditorState.troops.find(item => item.uid === input.getAttribute("data-line-id"))
-      if(!line) return
-      line.quantity = Math.max(0, Math.floor(n0(input.value)))
-    })
   })
   list.querySelectorAll(".attack-editor-delete").forEach((button) => {
     button.addEventListener("click", () => {
@@ -709,9 +686,6 @@ function saveAttackEditorTroops(){
     const row = attackRows.find(item => item.id === attackEditorState.id)
     if(row){
       row.troops = cleaned
-      if(row.slowestTroopName && !getValidTroopEntries(row).some(item => normalizeText(item.name) === normalizeText(row.slowestTroopName))){
-        row.slowestTroopName = ""
-      }
       row.lastAlertKey = ""
       showStatus(`Tropas guardadas en la fila ${fmtInt(row.id)}.`, "ok")
     }
@@ -811,7 +785,7 @@ function getReminderBadge(view, row){
 function renderAttackRows(lookup){
   const body = $("attackRowsBody")
   if(!attackRows.length){
-    body.innerHTML = `<tr><td colspan="16" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
+    body.innerHTML = `<tr><td colspan="15" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
     return
   }
 
@@ -832,9 +806,6 @@ function renderAttackRows(lookup){
       now > sendMs && sendMs > 0 ? "is-overdue" : "",
       now >= reminderMs && now <= sendMs && reminderMs > 0 ? "is-alerting" : ""
     ].filter(Boolean).join(" ")
-    const slowestOptions = view.troopEntries.length
-      ? view.troopEntries.map((item) => `<option value="${escapeHtml(item.name)}" ${view.slowest?.name === item.name ? "selected" : ""}>${escapeHtml(item.name)} · ${fmtInt(item.speed)} c/h</option>`).join("")
-      : `<option value="">Sin tropas</option>`
     return `
       <tr class="${rowClasses}" data-attack-id="${fmtInt(row.id)}">
         <td>${fmtInt(row.id)}</td>
@@ -847,16 +818,13 @@ function renderAttackRows(lookup){
           <div class="attack-sub">${escapeHtml(toCoords(row.targetX, row.targetY))}</div>
         </td>
         <td>
-          <select class="attack-slowest-select" data-attack-id="${fmtInt(row.id)}" ${view.troopEntries.length ? "" : "disabled"}>
-            ${slowestOptions}
-          </select>
+          <div class="attack-name">${escapeHtml(view.slowest ? view.slowest.name : "-")}</div>
           <div class="attack-sub">${escapeHtml(view.slowest ? `${fmtInt(view.slowest.speed)} c/h` : "Sin tropas")}</div>
         </td>
         <td><span class="attack-pill">${escapeHtml(row.attackKind === "FAKE" ? "FAKE" : "REAL")}</span></td>
         <td>${escapeHtml(view.distanceLabel)}</td>
         <td>${escapeHtml(view.travelSeconds ? fmtTime(view.travelSeconds) : "-")}</td>
         <td>${getReminderBadge(view, row)}</td>
-        <td><div class="attack-summary-list">${view.troopEntries.length ? view.troopEntries.map(item => `<span>${escapeHtml(item.name)}: ${fmtInt(item.quantity)}</span>`).join("") : `<span class="attack-sub">Sin tropas</span>`}</div></td>
         <td><span class="attack-pill">x${fmtInt(row.attackCountMultiplier || getAttackCountMultiplier())}</span></td>
         <td class="attack-send-time">
           <div class="attack-name">${escapeHtml(formatDateLabel(view.sendDate))}</div>
@@ -895,16 +863,6 @@ function renderAttackRows(lookup){
       openAttackEditor("row", Math.floor(n0(button.getAttribute("data-attack-id"))))
     })
   })
-  body.querySelectorAll(".attack-slowest-select").forEach((select) => {
-    select.addEventListener("change", () => {
-      const row = attackRows.find(item => item.id === Math.floor(n0(select.getAttribute("data-attack-id"))))
-      if(!row) return
-      row.slowestTroopName = String(select.value || "").trim()
-      row.lastAlertKey = ""
-      renderAttackPlanner()
-      showStatus(`Tropa lenta actualizada en fila ${fmtInt(row.id)}.`, "ok")
-    })
-  })
   body.querySelectorAll(".attack-real-arrival-input").forEach((input) => {
     input.addEventListener("input", () => {
       const row = attackRows.find(item => item.id === Math.floor(n0(input.getAttribute("data-attack-id"))))
@@ -931,7 +889,6 @@ function renderAttackRows(lookup){
         tournamentLevel: row.tournamentLevel,
         arrivalAt: row.arrivalAt,
         arrivalAuto: false,
-        slowestTroopName: row.slowestTroopName || "",
         troops: cloneTroops(row.troops, row.race)
       }
       syncDraftToDom()
@@ -1002,7 +959,6 @@ function serializeAttackForConfig(row){
     tournamentLevel: Math.max(0, Math.floor(n0(row?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(row?.attackCountMultiplier || getAttackCountMultiplier()))),
     attackKind: String(row?.attackKind || getAttackKind()).toUpperCase() === "FAKE" ? "FAKE" : "REAL",
-    slowestTroopName: String(row?.slowestTroopName || ""),
     arrivalAtIso: arrivalDate ? arrivalDate.toISOString() : "",
     realArrivalAtIso: realArrivalDate ? realArrivalDate.toISOString() : "",
     troops: cloneTroops(row?.troops, row?.race)
@@ -1092,7 +1048,6 @@ function hydrateAttackFromConfig(item, fallbackId){
     tournamentLevel: Math.max(0, Math.floor(n0(item?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(item?.attackCountMultiplier || getAttackCountMultiplier()))),
     attackKind: String(item?.attackKind || getAttackKind()).toUpperCase() === "FAKE" ? "FAKE" : "REAL",
-    slowestTroopName: String(item?.slowestTroopName || ""),
     arrivalAt,
     realArrivalAt,
     troops: cloneTroops(item?.troops, race),
@@ -1127,7 +1082,6 @@ function applyAttackConfig(config){
     arrivalAt: draft.arrivalAt,
     arrivalAuto: false,
     realArrivalAt: draft.realArrivalAt,
-    slowestTroopName: draft.slowestTroopName,
     troops: cloneTroops(draft.troops, draft.race)
   }
   syncDraftToDom()
@@ -1147,7 +1101,7 @@ function validateDraftAttack(){
   if(attackDraft.originX === "" || attackDraft.originY === "") throw new Error("Define coordenadas de aldea origen.")
   if(attackDraft.targetX === "" || attackDraft.targetY === "") throw new Error("Define coordenadas de aldea destino.")
   if(!parseDateTimeLocal(attackDraft.arrivalAt)) throw new Error("Define una hora objetivo de llegada valida.")
-  if(!getValidTroopEntries(attackDraft).length) throw new Error("Configura al menos una tropa con cantidad mayor a cero.")
+  if(!getValidTroopEntries(attackDraft).length) throw new Error("Configura al menos un tipo de tropa.")
 }
 
 function addDraftAttack(){
@@ -1163,7 +1117,6 @@ function addDraftAttack(){
       tournamentLevel: Math.max(0, Math.floor(n0(attackDraft.tournamentLevel))),
       attackCountMultiplier: getAttackCountMultiplier(),
       attackKind: getAttackKind(),
-      slowestTroopName: attackDraft.slowestTroopName || "",
       arrivalAt: attackDraft.arrivalAt,
       realArrivalAt: attackDraft.arrivalAt,
       troops: cloneTroops(attackDraft.troops, attackDraft.race),
