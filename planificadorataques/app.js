@@ -714,6 +714,7 @@ function applySuggestedArrivalToDraft(){
   attackRows = attackRows.map((row) => ({
     ...row,
     arrivalAt: suggestedValue,
+    realArrivalAt: row.realArrivalAt || suggestedValue,
     lastAlertKey: ""
   }))
   renderAttackPlanner()
@@ -768,7 +769,7 @@ function getReminderBadge(view, row){
 function renderAttackRows(lookup){
   const body = $("attackRowsBody")
   if(!attackRows.length){
-    body.innerHTML = `<tr><td colspan="13" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
+    body.innerHTML = `<tr><td colspan="15" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
     return
   }
 
@@ -814,6 +815,9 @@ function renderAttackRows(lookup){
           <div class="attack-sub">${escapeHtml(view.arrivalDate ? view.arrivalDate.toLocaleDateString("es-CO") : "-")}</div>
         </td>
         <td>
+          <input class="attack-real-arrival-input" type="datetime-local" data-attack-id="${fmtInt(row.id)}" value="${escapeHtml(row.realArrivalAt || row.arrivalAt || "")}">
+        </td>
+        <td>
           <div class="attack-link-actions">
             <a class="btn btn-orange btn-small" href="${escapeHtml(view.attackLink || "#")}" target="_blank" rel="noopener noreferrer" ${view.attackLink ? "" : "aria-disabled=\"true\""}>Abrir</a>
             <button class="btn btn-small attack-copy-link" type="button" data-attack-id="${fmtInt(row.id)}" ${view.attackLink ? "" : "disabled"}>Copiar</button>
@@ -833,6 +837,19 @@ function renderAttackRows(lookup){
   body.querySelectorAll(".attack-edit").forEach((button) => {
     button.addEventListener("click", () => {
       openAttackEditor("row", Math.floor(n0(button.getAttribute("data-attack-id"))))
+    })
+  })
+  body.querySelectorAll(".attack-real-arrival-input").forEach((input) => {
+    input.addEventListener("input", () => {
+      const row = attackRows.find(item => item.id === Math.floor(n0(input.getAttribute("data-attack-id"))))
+      if(!row) return
+      row.realArrivalAt = String(input.value || "").trim()
+    })
+    input.addEventListener("change", () => {
+      const row = attackRows.find(item => item.id === Math.floor(n0(input.getAttribute("data-attack-id"))))
+      if(!row) return
+      row.realArrivalAt = String(input.value || "").trim()
+      showStatus(`Hora de llegada real actualizada en fila ${fmtInt(row.id)}.`, "ok")
     })
   })
   body.querySelectorAll(".attack-use-base").forEach((button) => {
@@ -907,6 +924,7 @@ async function copyTextToClipboard(text){
 
 function serializeAttackForConfig(row){
   const arrivalDate = parseDateTimeLocal(row?.arrivalAt)
+  const realArrivalDate = parseDateTimeLocal(row?.realArrivalAt || row?.arrivalAt)
   return {
     id: Math.max(0, Math.floor(n0(row?.id))),
     race: String(row?.race || "HUNOS").toUpperCase(),
@@ -917,6 +935,7 @@ function serializeAttackForConfig(row){
     tournamentLevel: Math.max(0, Math.floor(n0(row?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(row?.attackCountMultiplier || getAttackCountMultiplier()))),
     arrivalAtIso: arrivalDate ? arrivalDate.toISOString() : "",
+    realArrivalAtIso: realArrivalDate ? realArrivalDate.toISOString() : "",
     troops: cloneTroops(row?.troops, row?.race)
   }
 }
@@ -961,6 +980,26 @@ function exportAttackConfig(){
   showStatus(`Configuracion exportada: ${fmtInt(attackRows.length)} ataques.`, "ok")
 }
 
+function buildAttackReport(lookup){
+  if(!attackRows.length) throw new Error("No hay ataques para reportar.")
+  return attackRows.map((row) => {
+    const coords = parseCoordsFromAttack(row)
+    const view = computeAttackRowView(row, lookup || attackLastVillageLookup || {})
+    const realArrival = parseDateTimeLocal(row.realArrivalAt || row.arrivalAt)
+    return `${view.targetName} ${toCoords(coords.target.x, coords.target.y)} - ${formatDateTimeLabel(realArrival)}`
+  }).join("\n")
+}
+
+async function generateAttackReport(){
+  try {
+    const report = buildAttackReport(attackLastVillageLookup || {})
+    await copyTextToClipboard(report)
+    showStatus(`Reporte copiado al portapapeles: ${fmtInt(attackRows.length)} ataques.`, "ok")
+  } catch (error){
+    showStatus(String(error?.message || "No se pudo generar el reporte."), "bad")
+  }
+}
+
 function dateTimeLocalFromImportedIso(value){
   const text = String(value || "").trim()
   if(!text) return ""
@@ -972,6 +1011,7 @@ function dateTimeLocalFromImportedIso(value){
 function hydrateAttackFromConfig(item, fallbackId){
   const race = String(item?.race || "HUNOS").toUpperCase()
   const arrivalAt = dateTimeLocalFromImportedIso(item?.arrivalAtIso) || String(item?.arrivalAt || "").trim()
+  const realArrivalAt = dateTimeLocalFromImportedIso(item?.realArrivalAtIso) || String(item?.realArrivalAt || arrivalAt || "").trim()
   return {
     id: Math.max(1, Math.floor(n0(item?.id || fallbackId))),
     race,
@@ -982,6 +1022,7 @@ function hydrateAttackFromConfig(item, fallbackId){
     tournamentLevel: Math.max(0, Math.floor(n0(item?.tournamentLevel))),
     attackCountMultiplier: Math.max(1, Math.floor(n0(item?.attackCountMultiplier || getAttackCountMultiplier()))),
     arrivalAt,
+    realArrivalAt,
     troops: cloneTroops(item?.troops, race),
     lastAlertKey: ""
   }
@@ -1012,6 +1053,7 @@ function applyAttackConfig(config){
     tournamentLevel: draft.tournamentLevel,
     arrivalAt: draft.arrivalAt,
     arrivalAuto: false,
+    realArrivalAt: draft.realArrivalAt,
     troops: cloneTroops(draft.troops, draft.race)
   }
   syncDraftToDom()
@@ -1047,6 +1089,7 @@ function addDraftAttack(){
       tournamentLevel: Math.max(0, Math.floor(n0(attackDraft.tournamentLevel))),
       attackCountMultiplier: getAttackCountMultiplier(),
       arrivalAt: attackDraft.arrivalAt,
+      realArrivalAt: attackDraft.arrivalAt,
       troops: cloneTroops(attackDraft.troops, attackDraft.race),
       lastAlertKey: ""
     }
@@ -1255,6 +1298,9 @@ function bindDraftEvents(){
   })
   $("btnEditDraftTroops").addEventListener("click", () => {
     openAttackEditor("draft", null)
+  })
+  $("btnAttackReport").addEventListener("click", () => {
+    generateAttackReport()
   })
   $("btnExportAttackConfig").addEventListener("click", () => {
     exportAttackConfig()

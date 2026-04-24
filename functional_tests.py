@@ -3611,6 +3611,56 @@ def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
     assert "server.example.test" in result["link"], "La importacion no restauro el servidor para generar links"
 
 
+def test_attack_planner_real_arrival_report_uses_editable_matrix_value(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+        attackLastVillageLookup = {
+          "25,-25": { x: 25, y: -25, did: 1002, name: "Objetivo Real" }
+        };
+        attackRows = [{
+          id: 1,
+          race: "HUNOS",
+          originX: "84",
+          originY: "-166",
+          targetX: "25",
+          targetY: "-25",
+          tournamentLevel: 15,
+          attackCountMultiplier: 4,
+          arrivalAt: "2026-04-25T23:26",
+          realArrivalAt: "2026-04-25T23:31",
+          troops: [{ uid: "r1", name: "Catapulta", quantity: 1 }],
+          lastAlertKey: ""
+        }];
+        renderAttackRows(attackLastVillageLookup);
+
+        const input = document.querySelector(".attack-real-arrival-input");
+        input.value = "2026-04-25T23:45";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        const report = buildAttackReport(attackLastVillageLookup);
+        const exported = buildAttackConfigExport();
+
+        done({
+          rowRealArrival: attackRows[0].realArrivalAt,
+          report,
+          realIso: exported.attacks[0].realArrivalAtIso,
+          status: document.getElementById("statusLine").textContent.trim()
+        });
+        """
+    )
+
+    assert result["rowRealArrival"] == "2026-04-25T23:45", "Editar la hora real en matriz no actualizo la fila"
+    assert "Objetivo Real (25|-25)" in result["report"], "El reporte no incluyo aldea destino con coordenadas"
+    assert "25/04/2026 23:45:00" in result["report"], "El reporte no uso la hora de llegada real editable"
+    assert result["realIso"], "La exportacion no guardo la hora de llegada real"
+    assert "Hora de llegada real actualizada" in result["status"], "La interfaz no confirmo la edicion de hora real"
+
+
 def test_npc_party_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
     wait_for(driver, "#btnImportParty")
@@ -4143,6 +4193,7 @@ def main():
                 ("attack_planner_editor_updates_row_troops", test_attack_planner_editor_updates_row_troops),
                 ("attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes", test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes),
                 ("attack_planner_exports_and_imports_shared_config", test_attack_planner_exports_and_imports_shared_config),
+                ("attack_planner_real_arrival_report_uses_editable_matrix_value", test_attack_planner_real_arrival_report_uses_editable_matrix_value),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),

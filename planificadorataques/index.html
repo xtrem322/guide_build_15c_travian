@@ -100,7 +100,7 @@
   }
   .attack-table{
     width:100%;
-    min-width:1580px;
+    min-width:1730px;
     border-collapse:collapse;
   }
   .attack-table th,
@@ -234,6 +234,9 @@
   .attack-send-time{
     min-width:112px;
   }
+  .attack-real-arrival-input{
+    min-width:170px;
+  }
   .attack-row-actions{
     min-width:150px;
   }
@@ -349,6 +352,7 @@
             <button class="btn btn-orange" id="btnAddAttackRow" type="button">Anadir</button>
             <button class="btn" id="btnUseSuggestedArrival" type="button">Usar llegada sugerida</button>
             <button class="btn" id="btnEditDraftTroops" type="button">Editar tropas del borrador</button>
+            <button class="btn" id="btnAttackReport" type="button">Reporte</button>
             <button class="btn" id="btnExportAttackConfig" type="button">Exportar configuracion</button>
             <label class="btn" for="attackConfigFile">Importar configuracion</label>
             <input id="attackConfigFile" type="file" accept=".json,application/json" hidden>
@@ -371,6 +375,7 @@
                     <th>Hora local envio</th>
                     <th>Hora server envio</th>
                     <th>Hora server llegada</th>
+                    <th>Hora de llegada Real</th>
                     <th>Link</th>
                     <th>Acciones</th>
                   </tr>
