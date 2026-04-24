@@ -3276,11 +3276,15 @@ def test_attack_planner_defaults(driver, base_url):
 
     speed = Select(driver.find_element(By.ID, "serverSpeed")).first_selected_option.get_attribute("value")
     reminder_seconds = driver.find_element(By.ID, "attackReminderSeconds").get_attribute("value")
+    arrival_at = driver.find_element(By.ID, "attackArrivalAt").get_attribute("value")
     subtitle = driver.find_element(By.ID, "attackEditorSubtitle").text
     empty_text = driver.find_element(By.ID, "attackRowsBody").text
+    troop_tag = driver.find_element(By.CSS_SELECTOR, ".attack-editor-name").tag_name.lower()
 
     assert speed == "3", "Planificador de Ataques no inicio con velocidad x3"
     assert reminder_seconds == "60", "Planificador de Ataques no inicio con recordatorio de 60 segundos"
+    assert arrival_at == "", "La hora objetivo de llegada debe iniciar nula por defecto"
+    assert troop_tag == "select", "El editor de tropas debe usar una lista desplegable"
     assert "Borrador actual" in subtitle, "El panel lateral no abrio el borrador por defecto"
     assert "Todavia no hay ataques" in empty_text, "La matriz inicial no mostro el estado vacio esperado"
 
@@ -3323,7 +3327,8 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
           done({
             rowCount: document.querySelectorAll('#attackRowsBody tr[data-attack-id]').length,
             rowText: row ? row.textContent : "",
-            travel: row ? row.querySelector('td:nth-child(7)')?.textContent.trim() : "",
+            travel: row ? row.querySelector('td:nth-child(6)')?.textContent.trim() : "",
+            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : "",
             link: row ? row.querySelector('a')?.href || "" : "",
             status: document.getElementById("statusLine").textContent.trim()
           });
@@ -3335,6 +3340,7 @@ def test_attack_planner_adds_row_and_generates_attack_link(driver, base_url):
     assert result["rowCount"] == 1, "El planificador no agrego la fila del ataque"
     assert "Origen Uno" in result["rowText"] and "Destino Dos" in result["rowText"], "La fila no resolvio nombres con map.sql manual"
     assert result["travel"] == "03:20:00", "El viaje no aplico correctamente la plaza de torneos mas alla de 20 casillas"
+    assert result["detail"] == "x1", "La fila no mostro el detalle de cantidad de ataques configurado"
     assert "eventType=3" in result["link"], "El link de ataque no fijo eventType=3"
     assert "troop%5Bt1%5D=100" in result["link"] and "troop%5Bt7%5D=2" in result["link"], "El link de ataque no incluyo las tropas correctas"
     assert "agregada al planificador" in result["status"], "La interfaz no confirmo el alta de la fila"
@@ -3360,7 +3366,7 @@ def test_attack_planner_processes_reminders(driver, base_url):
         };
         window.Notification.permission = "granted";
 
-        document.getElementById("attackReminderSeconds").value = "60";
+        document.getElementById("attackReminderSeconds").value = "69";
         attackRows = [{
           id: 1,
           race: "HUNOS",
@@ -3378,7 +3384,7 @@ def test_attack_planner_processes_reminders(driver, base_url):
         processAttackReminders();
 
         setTimeout(() => {
-          const badge = document.querySelector('#attackRowsBody tr td:nth-child(9)')?.textContent.trim() || "";
+          const badge = document.querySelector('#attackRowsBody tr td:nth-child(7)')?.textContent.trim() || "";
           done({
             beeped: window.__beeped,
             notification: window.__notif ? window.__notif.title : "",
@@ -3392,7 +3398,7 @@ def test_attack_planner_processes_reminders(driver, base_url):
     assert result["beeped"], "El recordatorio no reprodujo sonido cuando la fila entro en ventana de envio"
     assert result["notification"] == "Ataque por enviar", "El recordatorio no disparo la notificacion esperada"
     assert result["alertKey"], "El recordatorio no marco la fila como ya avisada"
-    assert "Avisado" in result["badge"], "La matriz no mostro el estado avisado tras procesar el recordatorio"
+    assert result["badge"] == "69", "La matriz no mostro los segundos de aviso configurados tras procesar el recordatorio"
 
 
 def test_attack_planner_editor_updates_row_troops(driver, base_url):
@@ -3441,6 +3447,83 @@ def test_attack_planner_editor_updates_row_troops(driver, base_url):
     assert result["troopName"] == "Ariete" and result["troopQty"] == 3, "Guardar desde el panel lateral no actualizo las tropas de la fila"
     assert "troop%5Bt7%5D=3" in result["link"], "Guardar desde el panel lateral no actualizo el link con la nueva tropa"
     assert "Tropas guardadas en la fila 1" in result["status"], "La interfaz no confirmo el guardado desde el panel lateral"
+
+
+def test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+        document.getElementById("attackExtraMinutes").value = "7";
+        document.getElementById("attackCountMultiplier").value = "8";
+
+        attackRows = [
+          {
+            id: 1,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "10",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 8,
+            arrivalAt: "",
+            troops: [{ uid: "r1", name: "Mercenario", quantity: 1 }],
+            lastAlertKey: ""
+          },
+          {
+            id: 2,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "60",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 8,
+            arrivalAt: "",
+            troops: [{ uid: "r2", name: "Catapulta", quantity: 1 }],
+            lastAlertKey: "old-alert"
+          }
+        ];
+        attackDraft = {
+          race: "HUNOS",
+          originX: "0",
+          originY: "0",
+          targetX: "20",
+          targetY: "0",
+          tournamentLevel: 0,
+          arrivalAt: "",
+          arrivalAuto: true,
+          troops: [{ uid: "d1", name: "Mercenario", quantity: 1 }]
+        };
+        syncDraftToDom();
+
+        const before = new Date();
+        applySuggestedArrivalToDraft();
+        setTimeout(() => {
+          const arrival = parseDateTimeLocal(attackRows[0].arrivalAt);
+          const longestTravel = Math.max(...attackRows.map((row) => computeAttackRowView(row, {}).travelSeconds));
+          const diffSeconds = Math.round((arrival.getTime() - before.getTime()) / 1000);
+          const row = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
+          done({
+            sameArrival: attackRows.every((row) => row.arrivalAt === attackRows[0].arrivalAt) && attackDraft.arrivalAt === attackRows[0].arrivalAt,
+            secondsAreZero: arrival.getSeconds() === 0,
+            includesExtra: diffSeconds >= longestTravel + (7 * 60),
+            alertReset: attackRows.every((row) => row.lastAlertKey === ""),
+            detail: row ? row.querySelector('td:nth-child(9)')?.textContent.trim() : ""
+          });
+        }, 50);
+        """
+    )
+
+    assert result["sameArrival"], "Usar llegada sugerida no aplico la misma llegada al borrador y todas las filas"
+    assert result["secondsAreZero"], "La llegada sugerida no redondeo hacia arriba al minuto exacto"
+    assert result["includesExtra"], "La llegada sugerida no sumo los minutos extras configurados"
+    assert result["alertReset"], "Cambiar la llegada sugerida debe reiniciar avisos ya marcados"
+    assert result["detail"] == "x8", "La columna de detalle de ataques no reflejo el multiplicador configurado"
 
 
 def test_npc_party_capacity_and_resources_import(driver, base_url):
@@ -3973,6 +4056,7 @@ def main():
                 ("attack_planner_adds_row_and_generates_attack_link", test_attack_planner_adds_row_and_generates_attack_link),
                 ("attack_planner_processes_reminders", test_attack_planner_processes_reminders),
                 ("attack_planner_editor_updates_row_troops", test_attack_planner_editor_updates_row_troops),
+                ("attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes", test_attack_planner_suggested_arrival_updates_all_rows_with_extra_minutes),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),

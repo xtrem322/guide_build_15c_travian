@@ -399,6 +399,14 @@ function getAttackReminderSeconds(){
   return Math.max(1, Math.floor(n0($("attackReminderSeconds")?.value || 60)))
 }
 
+function getAttackExtraMinutes(){
+  return Math.max(0, Math.ceil(n0($("attackExtraMinutes")?.value || 0)))
+}
+
+function getAttackCountMultiplier(){
+  return Math.max(1, Math.floor(n0($("attackCountMultiplier")?.value || 1)))
+}
+
 function getAttackServerHost(){
   return String($("attackServerHost")?.value || DEFAULT_ATTACK_SERVER_HOST).trim()
 }
@@ -466,8 +474,21 @@ function formatDateLabel(date){
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+function formatDateTimeLabel(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return "-"
+  const pad = (value) => String(value).padStart(2, "0")
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 function addSeconds(date, seconds){
   return new Date(date.getTime() + (Math.floor(n0(seconds)) * 1000))
+}
+
+function ceilDateToMinute(date){
+  const d = date instanceof Date ? new Date(date.getTime()) : new Date()
+  if(d.getSeconds() > 0 || d.getMilliseconds() > 0) d.setMinutes(d.getMinutes() + 1)
+  d.setSeconds(0, 0)
+  return d
 }
 
 function buildAttackLink(attack, troopEntries){
@@ -528,8 +549,18 @@ function computeAttackRowView(attack, lookup){
 function getSuggestedArrivalDate(attack){
   const view = computeAttackRowView(attack, attackLastVillageLookup || {})
   const now = new Date()
-  const baseSeconds = Math.max(0, view.travelSeconds) + (5 * 60)
-  return addSeconds(now, baseSeconds)
+  const baseSeconds = Math.max(0, view.travelSeconds) + (getAttackExtraMinutes() * 60)
+  return ceilDateToMinute(addSeconds(now, baseSeconds))
+}
+
+function getSuggestedArrivalDateForPlanner(){
+  const attacks = attackRows.length ? attackRows.slice() : []
+  if(attackDraft) attacks.push(attackDraft)
+  const longestTravel = attacks.reduce((max, attack) => {
+    const view = computeAttackRowView(attack, attackLastVillageLookup || {})
+    return Math.max(max, view.travelSeconds || 0)
+  }, 0)
+  return ceilDateToMinute(addSeconds(new Date(), longestTravel + (getAttackExtraMinutes() * 60)))
 }
 
 function syncDraftFromDom(){
@@ -606,7 +637,9 @@ function renderAttackEditor(){
     row.innerHTML = `
       <div class="tool">
         <div class="tool-label">Tropa</div>
-        <input type="text" class="attack-editor-name" data-line-id="${escapeHtml(troop.uid)}" list="attackTroopOptions" value="${escapeHtml(troop.name)}" placeholder="Nombre de tropa">
+        <select class="attack-editor-name" data-line-id="${escapeHtml(troop.uid)}">
+          ${getTroopsByRace(attackEditorState.race).map((option) => `<option value="${escapeHtml(option.name)}" ${option.name === troop.name ? "selected" : ""}>${escapeHtml(option.name)}</option>`).join("")}
+        </select>
       </div>
       <div class="tool">
         <div class="tool-label">Cantidad</div>
@@ -618,11 +651,13 @@ function renderAttackEditor(){
   }
 
   list.querySelectorAll(".attack-editor-name").forEach((input) => {
-    input.addEventListener("input", () => {
+    const updateName = () => {
       const line = attackEditorState.troops.find(item => item.uid === input.getAttribute("data-line-id"))
       if(!line) return
       line.name = input.value
-    })
+    }
+    input.addEventListener("input", updateName)
+    input.addEventListener("change", updateName)
   })
   list.querySelectorAll(".attack-editor-qty").forEach((input) => {
     input.addEventListener("input", () => {
@@ -645,11 +680,6 @@ function saveAttackEditorTroops(){
   const cleaned = cloneTroops(attackEditorState.troops, attackEditorState.race)
   if(attackEditorState.kind === "draft"){
     attackDraft.troops = cleaned
-    if(attackDraft.arrivalAuto || !attackDraft.arrivalAt){
-      attackDraft.arrivalAt = formatDateTimeLocal(getSuggestedArrivalDate(attackDraft))
-      attackDraft.arrivalAuto = true
-      $("attackArrivalAt").value = attackDraft.arrivalAt
-    }
     showStatus("Tropas del borrador actualizadas.", "ok")
   } else {
     const row = attackRows.find(item => item.id === attackEditorState.id)
@@ -670,10 +700,16 @@ function addEditorTroopLine(){
 
 function applySuggestedArrivalToDraft(){
   syncDraftFromDom()
-  const suggested = getSuggestedArrivalDate(attackDraft)
-  attackDraft.arrivalAt = formatDateTimeLocal(suggested)
+  const suggested = getSuggestedArrivalDateForPlanner()
+  const suggestedValue = formatDateTimeLocal(suggested)
+  attackDraft.arrivalAt = suggestedValue
   attackDraft.arrivalAuto = true
-  $("attackArrivalAt").value = attackDraft.arrivalAt
+  $("attackArrivalAt").value = suggestedValue
+  attackRows = attackRows.map((row) => ({
+    ...row,
+    arrivalAt: suggestedValue,
+    lastAlertKey: ""
+  }))
   renderAttackPlanner()
 }
 
@@ -705,7 +741,7 @@ function renderDraftPreview(lookup){
     </div>
     <div class="attack-preview-card">
       <div class="attack-preview-label">Llegada sugerida</div>
-      <div class="attack-preview-value">${escapeHtml(formatDateLabel(getSuggestedArrivalDate(attackDraft)))}</div>
+      <div class="attack-preview-value">${escapeHtml(formatDateTimeLabel(getSuggestedArrivalDateForPlanner()))}</div>
     </div>
   `
 }
@@ -717,8 +753,8 @@ function getReminderBadge(view, row){
   const sendMs = view.sendDate.getTime()
   if(now > sendMs) return `<span class="attack-pill bad">Vencido</span>`
   if(now >= reminderMs){
-    if(row?.lastAlertKey === view.reminderKey) return `<span class="attack-pill warn">Avisado</span>`
-    return `<span class="attack-pill warn">En ventana</span>`
+    if(row?.lastAlertKey === view.reminderKey) return `<span class="attack-pill warn">${fmtInt(getAttackReminderSeconds())}</span>`
+    return `<span class="attack-pill warn">${fmtInt(getAttackReminderSeconds())}</span>`
   }
   return `<span class="attack-pill">${fmtTime(Math.floor((reminderMs - now) / 1000))}</span>`
 }
@@ -726,7 +762,7 @@ function getReminderBadge(view, row){
 function renderAttackRows(lookup){
   const body = $("attackRowsBody")
   if(!attackRows.length){
-    body.innerHTML = `<tr><td colspan="12" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
+    body.innerHTML = `<tr><td colspan="13" class="attack-empty">Todavia no hay ataques en la matriz.</td></tr>`
     return
   }
 
@@ -751,21 +787,26 @@ function renderAttackRows(lookup){
           <div class="attack-sub">${escapeHtml(toCoords(row.targetX, row.targetY))}</div>
         </td>
         <td>
-          <div class="attack-name">${escapeHtml(formatDateLabel(view.arrivalDate))}</div>
-          <div class="attack-sub">${escapeHtml(String(row.arrivalAt || "").replace("T", " "))}</div>
-        </td>
-        <td>
           <div class="attack-name">${escapeHtml(view.slowest ? view.slowest.name : "-")}</div>
           <div class="attack-sub">${escapeHtml(view.slowest ? `${fmtInt(view.slowest.speed)} c/h` : "Sin tropas")}</div>
         </td>
         <td>${escapeHtml(view.distanceLabel)}</td>
         <td>${escapeHtml(view.travelSeconds ? fmtTime(view.travelSeconds) : "-")}</td>
-        <td>
+        <td>${getReminderBadge(view, row)}</td>
+        <td><div class="attack-summary-list">${view.troopEntries.length ? view.troopEntries.map(item => `<span>${escapeHtml(item.name)}: ${fmtInt(item.quantity)}</span>`).join("") : `<span class="attack-sub">Sin tropas</span>`}</div></td>
+        <td><span class="attack-pill">x${fmtInt(row.attackCountMultiplier || getAttackCountMultiplier())}</span></td>
+        <td class="attack-send-time">
           <div class="attack-name">${escapeHtml(formatDateLabel(view.sendDate))}</div>
           <div class="attack-sub">${escapeHtml(view.sendDate ? view.sendDate.toLocaleDateString("es-CO") : "-")}</div>
         </td>
-        <td>${getReminderBadge(view, row)}</td>
-        <td><div class="attack-summary-list">${view.troopEntries.length ? view.troopEntries.map(item => `<span>${escapeHtml(item.name)}: ${fmtInt(item.quantity)}</span>`).join("") : `<span class="attack-sub">Sin tropas</span>`}</div></td>
+        <td class="attack-send-time">
+          <div class="attack-name">${escapeHtml(formatDateLabel(view.sendDate))}</div>
+          <div class="attack-sub">${escapeHtml(view.sendDate ? view.sendDate.toLocaleDateString("es-CO") : "-")}</div>
+        </td>
+        <td class="attack-send-time">
+          <div class="attack-name">${escapeHtml(formatDateLabel(view.arrivalDate))}</div>
+          <div class="attack-sub">${escapeHtml(view.arrivalDate ? view.arrivalDate.toLocaleDateString("es-CO") : "-")}</div>
+        </td>
         <td>
           <div class="attack-link-actions">
             <a class="btn btn-orange btn-small" href="${escapeHtml(view.attackLink || "#")}" target="_blank" rel="noopener noreferrer" ${view.attackLink ? "" : "aria-disabled=\"true\""}>Abrir</a>
@@ -877,6 +918,7 @@ function addDraftAttack(){
       targetX: attackDraft.targetX,
       targetY: attackDraft.targetY,
       tournamentLevel: Math.max(0, Math.floor(n0(attackDraft.tournamentLevel))),
+      attackCountMultiplier: getAttackCountMultiplier(),
       arrivalAt: attackDraft.arrivalAt,
       troops: cloneTroops(attackDraft.troops, attackDraft.race),
       lastAlertKey: ""
@@ -1024,6 +1066,12 @@ function bindDraftEvents(){
   $("attackReminderSeconds").addEventListener("input", () => {
     renderAttackPlanner()
   })
+  $("attackExtraMinutes").addEventListener("input", () => {
+    renderAttackPlanner()
+  })
+  $("attackCountMultiplier").addEventListener("change", () => {
+    renderAttackPlanner()
+  })
   $("attackRace").addEventListener("change", () => {
     const nextRace = String($("attackRace").value || "HUNOS").toUpperCase()
     attackDraft.race = nextRace
@@ -1033,20 +1081,10 @@ function bindDraftEvents(){
     }).filter(Boolean)
     if(!attackDraft.troops.length) attackDraft.troops = [createTroopLine(nextRace)]
     if(attackEditorTarget.kind === "draft") openAttackEditor("draft", null)
-    if(attackDraft.arrivalAuto || !attackDraft.arrivalAt){
-      attackDraft.arrivalAt = formatDateTimeLocal(getSuggestedArrivalDate(attackDraft))
-      $("attackArrivalAt").value = attackDraft.arrivalAt
-      attackDraft.arrivalAuto = true
-    }
     renderAttackPlanner()
   })
   ;["attackOriginX", "attackOriginY", "attackTargetX", "attackTargetY", "attackTournamentLevel"].forEach((id) => {
     $(id).addEventListener("input", () => {
-      if(attackDraft.arrivalAuto || !$("attackArrivalAt").value.trim()){
-        attackDraft.arrivalAt = formatDateTimeLocal(getSuggestedArrivalDate(attackDraft))
-        $("attackArrivalAt").value = attackDraft.arrivalAt
-        attackDraft.arrivalAuto = true
-      }
       renderAttackPlanner()
     })
     $(id).addEventListener("change", () => {
@@ -1107,8 +1145,6 @@ async function init(){
   initAttackRaceSelect()
   initTournamentLevelSelect()
   attackDraft = createDefaultDraft("HUNOS")
-  syncDraftToDom()
-  attackDraft.arrivalAt = formatDateTimeLocal(getSuggestedArrivalDate(attackDraft))
   syncDraftToDom()
   openAttackEditor("draft", null)
   updateNotificationsButton()
