@@ -3681,8 +3681,10 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
         window.clearInterval(attackReminderLoopId);
 
         const editor = document.querySelector(".attack-editor-card");
+        const mapSql = document.getElementById("attackMapSqlInput");
         const table = document.querySelector(".attack-table-wrap");
         const editorBeforeTable = Boolean(editor && table && (editor.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING));
+        const editorBeforeMapSql = Boolean(editor && mapSql && (editor.compareDocumentPosition(mapSql) & Node.DOCUMENT_POSITION_FOLLOWING));
 
         attackRows = [
           {
@@ -3735,6 +3737,7 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
           const updatedRow = document.querySelector('#attackRowsBody tr[data-attack-id="1"]');
           done({
             editorBeforeTable,
+            editorBeforeMapSql,
             realClass: realRow.classList.contains("is-real-attack"),
             fakeClass: fakeRow.classList.contains("is-fake-attack"),
             beforeTravel,
@@ -3748,6 +3751,7 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
     )
 
     assert result["editorBeforeTable"], "El editor de tropas no quedo arriba de la matriz"
+    assert result["editorBeforeMapSql"], "El editor de tropas debe quedar justo despues de Nuevo ataque, antes de map.sql"
     assert result["realClass"] and result["fakeClass"], "Las filas REAL/FAKE no recibieron sus clases de color"
     assert "Catapulta" in result["options"] and "Mercenario" in result["options"], "Tropa lenta no se limita a las tropas escogidas"
     assert result["beforeTravel"] == "06:40:00", "La tropa lenta calculada por defecto no uso la catapulta"

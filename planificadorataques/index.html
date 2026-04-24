@@ -365,6 +365,17 @@
 
           <div class="attack-preview-grid" id="attackDraftPreview"></div>
 
+          <div class="attack-editor-card">
+            <h2 class="attack-editor-title">Editor de tropas</h2>
+            <div class="attack-editor-subtitle" id="attackEditorSubtitle">Borrador actual</div>
+            <datalist id="attackTroopOptions"></datalist>
+            <div class="attack-editor-list" id="attackEditorList"></div>
+            <div class="attack-editor-actions">
+              <button class="btn" id="btnAddEditorTroop" type="button">Agregar tropa</button>
+              <button class="btn btn-orange" id="btnSaveEditorTroops" type="button">Guardar tropas</button>
+            </div>
+          </div>
+
           <div class="tool">
             <div class="tool-label">map.sql manual (opcional)</div>
             <textarea id="attackMapSqlInput" class="attack-textarea" placeholder="Si el servidor bloquea map.sql, pega aqui el contenido del archivo o cargalo con el boton inferior"></textarea>
@@ -384,17 +395,6 @@
             <button class="btn" id="btnExportAttackConfig" type="button">Exportar configuracion</button>
             <label class="btn" for="attackConfigFile">Importar configuracion</label>
             <input id="attackConfigFile" type="file" accept=".json,application/json" hidden>
-          </div>
-
-          <div class="attack-editor-card">
-            <h2 class="attack-editor-title">Editor de tropas</h2>
-            <div class="attack-editor-subtitle" id="attackEditorSubtitle">Borrador actual</div>
-            <datalist id="attackTroopOptions"></datalist>
-            <div class="attack-editor-list" id="attackEditorList"></div>
-            <div class="attack-editor-actions">
-              <button class="btn" id="btnAddEditorTroop" type="button">Agregar tropa</button>
-              <button class="btn btn-orange" id="btnSaveEditorTroops" type="button">Guardar tropas</button>
-            </div>
           </div>
 
           <div class="attack-table-wrap">
