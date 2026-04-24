@@ -741,6 +741,27 @@ function applySuggestedArrivalToDraft(){
   renderAttackPlanner()
 }
 
+function applyServerArrivalToAllRows(){
+  const serverArrival = parseDateTimeLocal($("attackServerArrivalGlobal")?.value || "")
+  if(!serverArrival){
+    showStatus("Define una hora server de llegada valida.", "bad")
+    return
+  }
+  const localArrival = addSeconds(serverArrival, -SERVER_TIME_OFFSET_SECONDS)
+  const localValue = formatDateTimeLocal(localArrival)
+  attackDraft.arrivalAt = localValue
+  attackDraft.arrivalAuto = false
+  $("attackArrivalAt").value = localValue
+  attackRows = attackRows.map((row) => ({
+    ...row,
+    arrivalAt: localValue,
+    realArrivalAt: row.realArrivalAt || localValue,
+    lastAlertKey: ""
+  }))
+  renderAttackPlanner()
+  showStatus(`Hora server de llegada aplicada a ${fmtInt(attackRows.length)} ataques.`, "ok")
+}
+
 function renderDraftPreview(lookup){
   const wrap = $("attackDraftPreview")
   const view = computeAttackRowView(attackDraft, lookup)
@@ -1248,6 +1269,11 @@ function renderAttackPlannerWithLookup(lookup){
   renderDraftPreview(lookup)
   renderAttackRows(lookup)
   renderAttackEditor()
+  const serverArrivalInput = $("attackServerArrivalGlobal")
+  if(serverArrivalInput && !serverArrivalInput.matches(":focus")){
+    const source = parseDateTimeLocal(attackRows[0]?.arrivalAt || attackDraft?.arrivalAt)
+    serverArrivalInput.value = source ? formatDateTimeLocal(addSeconds(source, SERVER_TIME_OFFSET_SECONDS)) : ""
+  }
 }
 
 async function renderAttackPlanner(){
@@ -1323,6 +1349,9 @@ function bindDraftEvents(){
     attackDraft.arrivalAuto = false
     syncDraftFromDom()
     renderAttackPlanner()
+  })
+  $("attackServerArrivalGlobal").addEventListener("change", () => {
+    applyServerArrivalToAllRows()
   })
   $("attackMapSqlInput").addEventListener("input", () => {
     refreshAttackMapSqlStatus()

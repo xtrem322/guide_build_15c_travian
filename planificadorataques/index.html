@@ -64,6 +64,9 @@
     align-items:center;
     margin:16px 0;
   }
+  .attack-action-tool{
+    min-width:240px;
+  }
   .attack-map-actions{
     display:flex;
     flex-wrap:wrap;
@@ -429,6 +432,10 @@
             <button class="btn" id="btnExportAttackConfig" type="button">Exportar configuracion</button>
             <label class="btn" for="attackConfigFile">Importar configuracion</label>
             <input id="attackConfigFile" type="file" accept=".json,application/json" hidden>
+            <div class="tool attack-action-tool">
+              <div class="tool-label">Hora server llegada global</div>
+              <input id="attackServerArrivalGlobal" type="datetime-local">
+            </div>
           </div>
 
           <div class="attack-table-wrap">

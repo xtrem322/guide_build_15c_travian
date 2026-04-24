@@ -3829,6 +3829,77 @@ def test_attack_planner_orders_rows_by_distance_and_offsets_server_time(driver, 
     assert "05:26:00" in result["serverArrival"], "La hora server no sumo 6 horas a la hora local"
 
 
+def test_attack_planner_global_server_arrival_sets_all_rows(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+        attackRows = [
+          {
+            id: 1,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "10",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 1,
+            attackKind: "REAL",
+            arrivalAt: "2026-04-25T10:00",
+            realArrivalAt: "",
+            troops: [{ uid: "r1", name: "Mercenario", quantity: 1 }],
+            lastAlertKey: "old"
+          },
+          {
+            id: 2,
+            race: "HUNOS",
+            originX: "0",
+            originY: "0",
+            targetX: "20",
+            targetY: "0",
+            tournamentLevel: 0,
+            attackCountMultiplier: 1,
+            attackKind: "FAKE",
+            arrivalAt: "2026-04-25T11:00",
+            realArrivalAt: "",
+            troops: [{ uid: "r2", name: "Mercenario", quantity: 1 }],
+            lastAlertKey: "old"
+          }
+        ];
+        attackDraft.arrivalAt = "2026-04-25T12:00";
+        syncDraftToDom();
+        renderAttackRows({});
+
+        const globalInput = document.getElementById("attackServerArrivalGlobal");
+        globalInput.value = "2026-04-26T05:26";
+        globalInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+        setTimeout(() => {
+          const serverArrivals = Array.from(document.querySelectorAll("#attackRowsBody tr[data-attack-id] td:nth-child(13)")).map((cell) => cell.textContent.trim());
+          done({
+            actionContainsGlobalInput: document.querySelector(".attack-actions").contains(globalInput),
+            rowArrivalValues: attackRows.map((row) => row.arrivalAt),
+            rowAlertKeys: attackRows.map((row) => row.lastAlertKey),
+            draftArrival: attackDraft.arrivalAt,
+            domArrival: document.getElementById("attackArrivalAt").value,
+            serverArrivals,
+            status: document.getElementById("statusLine").textContent.trim()
+          });
+        }, 60);
+        """
+    )
+
+    assert result["actionContainsGlobalInput"], "El campo de hora server global debe estar junto a los botones de accion"
+    assert result["rowArrivalValues"] == ["2026-04-25T23:26", "2026-04-25T23:26"], "La hora server global no se aplico como hora local -6h a todas las filas"
+    assert result["draftArrival"] == "2026-04-25T23:26" and result["domArrival"] == "2026-04-25T23:26", "La hora server global no actualizo el borrador"
+    assert result["rowAlertKeys"] == ["", ""], "Aplicar hora server global debe limpiar avisos previos"
+    assert all("05:26:00" in item for item in result["serverArrivals"]), "La columna Hora server llegada no mostro la hora global seteada"
+    assert "aplicada a 2 ataques" in result["status"], "La interfaz no confirmo la aplicacion de hora server global"
+
+
 def test_npc_party_capacity_and_resources_import(driver, base_url):
     driver.get(f"{base_url}/npcgrandesfiestas/")
     wait_for(driver, "#btnImportParty")
@@ -4364,6 +4435,7 @@ def main():
                 ("attack_planner_real_arrival_report_uses_editable_matrix_value", test_attack_planner_real_arrival_report_uses_editable_matrix_value),
                 ("attack_planner_slowest_selector_and_real_fake_rows", test_attack_planner_slowest_selector_and_real_fake_rows),
                 ("attack_planner_orders_rows_by_distance_and_offsets_server_time", test_attack_planner_orders_rows_by_distance_and_offsets_server_time),
+                ("attack_planner_global_server_arrival_sets_all_rows", test_attack_planner_global_server_arrival_sets_all_rows),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),
