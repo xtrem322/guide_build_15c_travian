@@ -3622,7 +3622,7 @@ def test_attack_planner_exports_and_imports_shared_config(driver, base_url):
     assert result["localArrival"] == result["expectedLocalArrival"], "La importacion no recalculo la llegada local desde ISO con el navegador"
     assert result["alertReset"], "La importacion debe limpiar avisos previos del archivo compartido"
     assert "Catapulta: 1" in result["troopText"] and "Mercenario: 1" in result["troopText"], "La importacion no restauro las tropas"
-    assert "23:26:00" in result["serverArrival"], "La matriz no mostro la hora server de llegada importada"
+    assert "05:26:00" in result["serverArrival"], "La matriz no mostro la hora server de llegada importada con +6 horas"
     assert "server.example.test" in result["link"], "La importacion no restauro el servidor para generar links"
 
 
@@ -3776,6 +3776,57 @@ def test_attack_planner_slowest_selector_and_real_fake_rows(driver, base_url):
     assert result["afterTravel"] == "03:20:00", "Editar tropa lenta no recalculo la duracion del viaje"
     assert result["selectedSlowest"] == "Mercenario", "La matriz no guardo la tropa lenta editada"
     assert result["exportedKind"] == "FAKE", "La exportacion no preservo el tipo REAL/FAKE"
+
+
+def test_attack_planner_orders_rows_by_distance_and_offsets_server_time(driver, base_url):
+    driver.get(f"{base_url}/planificadorataques/")
+    wait_for(driver, "#btnAddAttackRow")
+
+    result = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        window.clearInterval(attackReminderLoopId);
+        const baseRow = {
+          race: "HUNOS",
+          originX: "0",
+          originY: "0",
+          targetY: "0",
+          tournamentLevel: 0,
+          attackCountMultiplier: 1,
+          attackKind: "REAL",
+          arrivalAt: "2026-04-25T23:26",
+          realArrivalAt: "2026-04-25T23:26",
+          troops: [{ uid: "r", name: "Mercenario", quantity: 1 }],
+          lastAlertKey: ""
+        };
+        attackRows = [
+          { ...baseRow, id: 1, targetX: "40" },
+          { ...baseRow, id: 2, targetX: "10" },
+          { ...baseRow, id: 3, targetX: "25" }
+        ];
+        renderAttackRows({});
+        const firstOrder = Array.from(document.querySelectorAll("#attackRowsBody tr[data-attack-id]")).map((row) => row.getAttribute("data-attack-id"));
+
+        attackRows.push({ ...baseRow, id: 4, targetX: "5" });
+        renderAttackRows({});
+        const secondOrder = Array.from(document.querySelectorAll("#attackRowsBody tr[data-attack-id]")).map((row) => row.getAttribute("data-attack-id"));
+        const row4 = document.querySelector('#attackRowsBody tr[data-attack-id="4"]');
+
+        done({
+          firstOrder,
+          secondOrder,
+          localSend: row4.querySelector("td:nth-child(11)")?.textContent.trim() || "",
+          serverSend: row4.querySelector("td:nth-child(12)")?.textContent.trim() || "",
+          serverArrival: row4.querySelector("td:nth-child(13)")?.textContent.trim() || ""
+        });
+        """
+    )
+
+    assert result["firstOrder"] == ["2", "3", "1"], "La matriz no ordeno las filas por distancia de menor a mayor"
+    assert result["secondOrder"] == ["4", "2", "3", "1"], "La matriz no reordeno dinamicamente al agregar mas ataques"
+    assert "23:01:00" in result["localSend"], "La hora local de envio no se mostro como esperaba"
+    assert "05:01:00" in result["serverSend"], "La hora server de envio no sumo 6 horas a la hora local"
+    assert "05:26:00" in result["serverArrival"], "La hora server no sumo 6 horas a la hora local"
 
 
 def test_npc_party_capacity_and_resources_import(driver, base_url):
@@ -4312,6 +4363,7 @@ def main():
                 ("attack_planner_exports_and_imports_shared_config", test_attack_planner_exports_and_imports_shared_config),
                 ("attack_planner_real_arrival_report_uses_editable_matrix_value", test_attack_planner_real_arrival_report_uses_editable_matrix_value),
                 ("attack_planner_slowest_selector_and_real_fake_rows", test_attack_planner_slowest_selector_and_real_fake_rows),
+                ("attack_planner_orders_rows_by_distance_and_offsets_server_time", test_attack_planner_orders_rows_by_distance_and_offsets_server_time),
                 ("npc_party_capacity_and_resources_import", test_npc_party_capacity_and_resources_import),
                 ("npc_party_central_total_and_village_transfers", test_npc_party_central_total_and_village_transfers),
                 ("npc_party_uses_village_transfers_only_after_central_exhausts", test_npc_party_uses_village_transfers_only_after_central_exhausts),

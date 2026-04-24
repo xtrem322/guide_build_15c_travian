@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id)
 const DEFAULT_ATTACK_SERVER_HOST = "eternos.x3.hispano.travian.com"
 const ATTACK_CONFIG_SCHEMA = "travian-attack-planner-config"
 const ATTACK_CONFIG_VERSION = 1
+const SERVER_TIME_OFFSET_SECONDS = 6 * 3600
 const TRAVIAN_MAP_SIZE = 401
 const TOURNAMENT_FREE_TILES = 20
 const TOURNAMENT_BONUS_PER_LEVEL = 0.2
@@ -544,6 +545,8 @@ function computeAttackRowView(attack, lookup){
   const travelSeconds = slowest ? getTravelSeconds(distance, slowest.speed, attack?.tournamentLevel) : 0
   const arrivalDate = parseDateTimeLocal(attack?.arrivalAt)
   const sendDate = arrivalDate ? addSeconds(arrivalDate, -travelSeconds) : null
+  const serverSendDate = sendDate ? addSeconds(sendDate, SERVER_TIME_OFFSET_SECONDS) : null
+  const serverArrivalDate = arrivalDate ? addSeconds(arrivalDate, SERVER_TIME_OFFSET_SECONDS) : null
   const reminderDate = sendDate ? addSeconds(sendDate, -getAttackReminderSeconds()) : null
   const reminderKey = reminderDate ? `${Math.floor(reminderDate.getTime() / 1000)}|${fmtInt(getAttackReminderSeconds())}` : ""
   return {
@@ -558,6 +561,8 @@ function computeAttackRowView(attack, lookup){
     travelSeconds,
     sendDate,
     arrivalDate,
+    serverSendDate,
+    serverArrivalDate,
     reminderDate,
     reminderKey,
     troopSummary: summarizeTroops(troopEntries),
@@ -789,8 +794,15 @@ function renderAttackRows(lookup){
     return
   }
 
-  body.innerHTML = attackRows.map((row) => {
-    const view = computeAttackRowView(row, lookup)
+  const rowsWithViews = attackRows
+    .map((row) => ({ row, view: computeAttackRowView(row, lookup) }))
+    .sort((a, b) => {
+      const distanceDiff = a.view.distance - b.view.distance
+      if(Math.abs(distanceDiff) > 0.000001) return distanceDiff
+      return a.row.id - b.row.id
+    })
+
+  body.innerHTML = rowsWithViews.map(({ row, view }) => {
     const now = Date.now()
     const sendMs = view.sendDate?.getTime() || 0
     const reminderMs = view.reminderDate?.getTime() || 0
@@ -830,12 +842,12 @@ function renderAttackRows(lookup){
           <div class="attack-sub">${escapeHtml(view.sendDate ? view.sendDate.toLocaleDateString("es-CO") : "-")}</div>
         </td>
         <td class="attack-send-time">
-          <div class="attack-name">${escapeHtml(formatDateLabel(view.sendDate))}</div>
-          <div class="attack-sub">${escapeHtml(view.sendDate ? view.sendDate.toLocaleDateString("es-CO") : "-")}</div>
+          <div class="attack-name">${escapeHtml(formatDateLabel(view.serverSendDate))}</div>
+          <div class="attack-sub">${escapeHtml(view.serverSendDate ? view.serverSendDate.toLocaleDateString("es-CO") : "-")}</div>
         </td>
         <td class="attack-send-time">
-          <div class="attack-name">${escapeHtml(formatDateLabel(view.arrivalDate))}</div>
-          <div class="attack-sub">${escapeHtml(view.arrivalDate ? view.arrivalDate.toLocaleDateString("es-CO") : "-")}</div>
+          <div class="attack-name">${escapeHtml(formatDateLabel(view.serverArrivalDate))}</div>
+          <div class="attack-sub">${escapeHtml(view.serverArrivalDate ? view.serverArrivalDate.toLocaleDateString("es-CO") : "-")}</div>
         </td>
         <td>
           <input class="attack-real-arrival-input" type="datetime-local" data-attack-id="${fmtInt(row.id)}" value="${escapeHtml(row.realArrivalAt || row.arrivalAt || "")}">
